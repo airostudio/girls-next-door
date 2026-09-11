@@ -27,14 +27,10 @@ export default function Sidebar({ agencyName }: Props) {
   return (
     <aside className="w-60 flex-shrink-0 bg-surface-card border-r border-surface-border flex flex-col h-screen sticky top-0">
       {/* Brand */}
-      <div className="p-5 border-b border-surface-border">
-        <div className="flex items-center gap-3">
-          <Logo size="sm" mark={agencyName.charAt(0).toUpperCase()} />
-          <div>
-            <div className="font-display font-semibold text-stone-50 text-sm leading-tight tracking-wide">{agencyName}</div>
-            <div className="text-[10px] text-brand-500/80 leading-tight uppercase tracking-widest mt-0.5">Talent Agency</div>
-          </div>
-        </div>
+      <div className="p-4 border-b border-surface-border">
+        <Link href="/dashboard" className="block">
+          <Logo size="sm" alt={agencyName} />
+        </Link>
       </div>
 
       {/* Nav */}
