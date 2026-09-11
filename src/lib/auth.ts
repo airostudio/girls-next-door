@@ -1,7 +1,6 @@
 import { NextAuthOptions } from 'next-auth'
 import type { Adapter } from 'next-auth/adapters'
 import GoogleProvider from 'next-auth/providers/google'
-import GitHubProvider from 'next-auth/providers/github'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { SupabaseAdapter } from '@auth/supabase-adapter'
@@ -55,15 +54,10 @@ export const authOptions: NextAuthOptions = {
       clientId:     process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       // Without this, signing in with a second provider under the same email
-      // as an existing account (e.g. Google first, then GitHub later) throws
+      // as an existing account (e.g. a magic link first, then Google later) throws
       // OAuthAccountNotLinked instead of just linking it. Since the staff
       // table is already the real access gate, trusting the email match here
       // is safe for this app.
-      allowDangerousEmailAccountLinking: true,
-    }),
-    GitHubProvider({
-      clientId:     process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
       allowDangerousEmailAccountLinking: true,
     }),
     EmailProvider({

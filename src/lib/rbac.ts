@@ -17,7 +17,7 @@ export function hasRole(role: Role | null | undefined, min: Role): boolean {
  * (its internal email normalizer runs before Unicode normalization) — rather
  * than depend on the library's handling, the actual allow/deny decision here
  * only ever compares normalized, ASCII-only strings. Every legitimate email
- * we care about (Gmail, GitHub, company domains) is plain ASCII, so this
+ * we care about (Gmail, company domains) is plain ASCII, so this
  * costs nothing for real users while closing off the entire homoglyph class.
  * Returns null (deny) for anything that doesn't survive normalization.
  */

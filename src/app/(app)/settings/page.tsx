@@ -252,7 +252,7 @@ function TeamManagement() {
           <strong className="text-stone-300">VIEWER</strong> can only view data. <strong className="text-stone-300">MANAGER</strong> can
           create and edit talent, campaigns, earnings, expenses, and clients. <strong className="text-stone-300">ADMIN</strong> can also
           delete records, manage the team, and edit agency settings. A team member signs in with the email
-          below via Google, GitHub, or a magic link — it doesn't need to match their login provider, just the
+          below via Google or a magic link — it doesn't need to match their login provider, just the
           email address itself.
         </p>
       </div>
