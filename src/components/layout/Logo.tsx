@@ -1,13 +1,33 @@
+import Image from 'next/image'
+
+// Intrinsic size of public/logo.png — the wordmark trimmed to its artwork.
+const LOGO_W = 1024
+const LOGO_H = 749
+
 const SIZES = {
-  sm: { box: 'w-9 h-9',  text: 'text-base' },
-  md: { box: 'w-14 h-14', text: 'text-2xl' },
+  sm: 'w-full max-w-[200px]', // sidebar brand block
+  md: 'w-full max-w-[320px]', // login screen
 } as const
 
-export default function Logo({ size = 'sm', mark = 'C' }: { size?: keyof typeof SIZES; mark?: string }) {
-  const { box, text } = SIZES[size]
+export default function Logo({
+  size = 'sm',
+  alt = 'Girls next Door Talent Agency',
+}: {
+  size?: keyof typeof SIZES
+  alt?: string
+}) {
   return (
-    <div className={`${box} rounded-lg border border-brand-500/50 bg-black flex items-center justify-center flex-shrink-0`}>
-      <span className={`font-display ${text} font-semibold text-brand-400`}>{mark}</span>
+    <div
+      className={`${SIZES[size]} rounded-xl bg-[#fdfcfb] ring-1 ring-brand-500/25 shadow-lg shadow-black/40 p-2.5 flex-shrink-0`}
+    >
+      <Image
+        src="/logo.png"
+        alt={alt}
+        width={LOGO_W}
+        height={LOGO_H}
+        priority
+        className="w-full h-auto"
+      />
     </div>
   )
 }

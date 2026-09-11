@@ -94,12 +94,8 @@ function LoginFormInner({ agencyName }: Props) {
     >
       <div className="w-full max-w-sm">
         {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex mb-4">
-            <Logo size="md" mark={agencyName.charAt(0).toUpperCase()} />
-          </div>
-          <h1 className="font-display text-3xl font-semibold text-stone-50 tracking-tight">{agencyName}</h1>
-          <p className="text-brand-500/90 mt-1.5 text-xs uppercase tracking-[0.2em]">Talent Agency</p>
+        <div className="flex flex-col items-center mb-8">
+          <Logo size="md" alt={agencyName} />
         </div>
 
         <div className="card">
