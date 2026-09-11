@@ -1,0 +1,43 @@
+{
+  "name": "clarity-4k",
+  "version": "1.0.0",
+  "description": "Clarity 4K — Talent Management Platform",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:seed": "node supabase/seed.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:40143/git/airostudio/Clarity-4k"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@auth/supabase-adapter": "^1.11.2",
+    "@supabase/supabase-js": "^2.105.4",
+    "@tailwindcss/forms": "^0.5.11",
+    "@types/node": "^25.7.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.5.0",
+    "date-fns": "^4.1.0",
+    "lucide-react": "^1.14.0",
+    "next": "^14.2.35",
+    "next-auth": "^4.24.14",
+    "nodemailer": "^7.0.13",
+    "postcss": "^8.5.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "tailwindcss": "^3.4.19",
+    "typescript": "^6.0.3",
+    "zod": "^4.6.1"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.1"
+  }
+}
