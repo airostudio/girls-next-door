@@ -129,8 +129,11 @@ export const authOptions: NextAuthOptions = {
     // data flows from signIn into jwt in NextAuth v4), so this stays a single
     // access-control lookup per sign-in rather than repeating it per callback.
     async signIn({ user }) {
-      const { allowed, role } = await resolveAccess(user.email)
-      if (allowed) (user as any).role = role
+      const { allowed, role, accountType } = await resolveAccess(user.email)
+      if (allowed) {
+        ;(user as any).role = role
+        ;(user as any).accountType = accountType
+      }
       return allowed
     },
     jwt({ token, user }) {
@@ -138,6 +141,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.email = user.email
         token.role = (user as any).role
+        token.accountType = (user as any).accountType
       }
       return token
     },
@@ -145,6 +149,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
+        ;(session.user as any).accountType = token.accountType
       }
       return session
     },
