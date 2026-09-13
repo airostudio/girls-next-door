@@ -151,9 +151,17 @@ create table if not exists staff (
   name       text,
   role       text not null default 'VIEWER', -- ADMIN | MANAGER | VIEWER
   status     text not null default 'ACTIVE', -- ACTIVE | INACTIVE
+  -- scrypt$N$r$p$salt$hash, set by an admin from Settings > Team. Null means
+  -- this person signs in with Google or a magic link only.
+  password_hash       text,
+  password_updated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run against a database that predates password sign-in.
+alter table staff add column if not exists password_hash       text;
+alter table staff add column if not exists password_updated_at timestamptz;
 
 -- ── Clients (brand / sponsor deals) ───────────────────────────────────────────
 create table if not exists clients (

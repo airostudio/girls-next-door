@@ -6,7 +6,8 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { SupabaseAdapter } from '@auth/supabase-adapter'
 import nodemailer from 'nodemailer'
 import { createHash, timingSafeEqual } from 'crypto'
-import { resolveAccess, normalizeEmail } from '@/lib/rbac'
+import { resolveAccess, normalizeEmail, getStaffByEmail } from '@/lib/rbac'
+import { verifyPassword } from '@/lib/password'
 import { getAgencyBranding } from '@/lib/agency'
 
 // Fixed-length digest comparison so a mismatched-length input can't short-circuit
@@ -94,32 +95,46 @@ export const authOptions: NextAuthOptions = {
         })
       },
     }),
-    // Admin-only password login for testing, alongside the OAuth/magic-link
-    // flows above. Backed by a single fixed credential pair in env vars —
-    // not a per-user password table — since this exists purely so one person
-    // can get in without depending on OAuth or an email service being wired
-    // up correctly.
+    // Email + password sign-in for staff. Two sources of truth, in order:
+    //
+    //   1. staff.password_hash — set by an admin from Settings > Team. This is
+    //      the normal path for everyone on the team.
+    //   2. ADMIN_EMAIL / ADMIN_PASSWORD env vars — a permanent break-glass
+    //      account that works before anyone exists in `staff`, and still works
+    //      if the database is unreachable. Keep that password strong.
+    //
+    // Every failure returns the same null, and a wrong email still does the
+    // full key derivation, so neither the response nor its timing reveals
+    // whether an address is on the team.
     CredentialsProvider({
-      name: 'Admin password',
+      id: 'password',
+      name: 'Email and password',
       credentials: {
         email:    { label: 'Email',    type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        const submitted = normalizeEmail(credentials?.email ?? '')
+        const password  = credentials?.password
+        if (!submitted || !password) return null
+
         const adminEmail    = process.env.ADMIN_EMAIL
         const adminPassword = process.env.ADMIN_PASSWORD
-        if (!adminEmail || !adminPassword) return null
-        if (!credentials?.email || !credentials?.password) return null
+        const normalizedAdmin = adminEmail ? normalizeEmail(adminEmail) : null
 
-        const submitted = normalizeEmail(credentials.email)
-        const expected   = normalizeEmail(adminEmail)
-        if (!submitted || !expected) return null
+        if (normalizedAdmin && submitted === normalizedAdmin && adminPassword) {
+          // Env-var credential, so there's no stored hash to verify against —
+          // a fixed-length digest comparison is the right tool here.
+          return safeEqual(password, adminPassword)
+            ? { id: adminEmail!, email: adminEmail!, name: 'Admin' }
+            : null
+        }
 
-        const emailMatches    = safeEqual(submitted, expected)
-        const passwordMatches = safeEqual(credentials.password, adminPassword)
-        if (!emailMatches || !passwordMatches) return null
+        const staff = await getStaffByEmail(submitted)
+        const ok = await verifyPassword(password, staff?.password_hash)
+        if (!ok || !staff || staff.status !== 'ACTIVE') return null
 
-        return { id: adminEmail, email: adminEmail, name: 'Admin' }
+        return { id: staff.id, email: staff.email, name: staff.name ?? staff.email }
       },
     }),
   ],

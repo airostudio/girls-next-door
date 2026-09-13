@@ -45,7 +45,7 @@ export function normalizeEmail(email: string): string | null {
   return normalized
 }
 
-async function getStaffRecord(normalizedEmail: string) {
+export async function getStaffByEmail(normalizedEmail: string) {
   // .eq() for an exact match — .ilike() would treat the email as a LIKE
   // pattern, so a stray % or _ in an address could wildcard-match staff
   // rows that aren't actually the same address. Relies on staff.email
@@ -94,7 +94,7 @@ export async function resolveAccess(
     }
   }
 
-  const staff = await getStaffRecord(normalized)
+  const staff = await getStaffByEmail(normalized)
   if (!staff || staff.status !== 'ACTIVE') return DENY
   return { allowed: true, role: staff.role as Role, accountType: 'STAFF' }
 }

@@ -10,7 +10,9 @@ export async function GET() {
   const auth = await requireRole('ADMIN')
   if (!auth.ok) return auth.response
 
-  const { data, error } = await supabase.from('staff').select('*').order('created_at', { ascending: true })
+  // Explicit columns, never select('*'): the row carries password_hash, which
+  // must not leave the server even for an admin.
+  const { data, error } = await supabase.from('staff').select('id, email, name, role, status, password_updated_at, created_at, updated_at').order('created_at', { ascending: true })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(toCamel(data ?? []))
 }
@@ -31,7 +33,7 @@ export async function POST(req: NextRequest) {
       role:   body.role   ?? 'VIEWER',
       status: body.status ?? 'ACTIVE',
     })
-    .select()
+    .select('id, email, name, role, status, password_updated_at, created_at, updated_at')
     .single()
 
   if (error) {
