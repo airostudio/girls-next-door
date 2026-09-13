@@ -1,12 +1,16 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Upload, Star, Trash2, Film, Loader2, AlertCircle } from 'lucide-react'
+import { Upload, Star, Trash2, Film, Loader2, AlertCircle, Minimize2 } from 'lucide-react'
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import {
   ACCEPT_ATTR, MAX_MEDIA_PER_TALENT, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES,
   formatBytes, kindFor,
 } from '@/lib/media'
+import {
+  compressImage, needsReview, savingsPercent,
+  COMPRESS_THRESHOLD_BYTES, MAX_EDGE_PX, type CompressionResult,
+} from '@/lib/imageCompress'
 
 interface MediaItem {
   id: string
@@ -25,6 +29,8 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
   const [busy,     setBusy]     = useState(0)      // uploads in flight
   const [error,    setError]    = useState('')
   const [dragging, setDragging] = useState(false)
+  const [review,   setReview]   = useState<{ large: CompressionResult[]; rest: File[] } | null>(null)
+  const [checking, setChecking] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const remaining = MAX_MEDIA_PER_TALENT - items.length
@@ -69,16 +75,8 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
     if (!confirm.ok) throw new Error(saved.error ?? 'Could not save the upload')
   }
 
-  async function handleFiles(fileList: FileList | null) {
-    if (!fileList?.length) return
-    setError('')
-
-    const files = Array.from(fileList)
-    if (files.length > remaining) {
-      setError(`Only ${remaining} slot${remaining === 1 ? '' : 's'} left — ${files.length} files selected.`)
-      return
-    }
-
+  async function runUploads(files: File[]) {
+    setReview(null)
     setBusy(files.length)
     for (const file of files) {
       try {
@@ -90,6 +88,38 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
       }
     }
     await load()
+  }
+
+  /**
+   * Anything close to the size limit is compressed up front and put in front of
+   * the user with the real before/after, rather than uploaded silently or
+   * blocked outright. Smaller files go straight through untouched.
+   */
+  async function handleFiles(fileList: FileList | null) {
+    if (!fileList?.length) return
+    setError('')
+    setReview(null)
+
+    const files = Array.from(fileList)
+    if (files.length > remaining) {
+      setError(`Only ${remaining} slot${remaining === 1 ? '' : 's'} left — ${files.length} files selected.`)
+      return
+    }
+
+    const oversized = files.filter(needsReview)
+    if (oversized.length === 0) { await runUploads(files); return }
+
+    setChecking(true)
+    const large = await Promise.all(oversized.map(compressImage))
+    setChecking(false)
+
+    const worthwhile = large.filter(r => r.changed)
+    const rest = files.filter(f => !oversized.includes(f))
+
+    // Nothing to gain — every large file is already well-optimised.
+    if (worthwhile.length === 0) { await runUploads(files); return }
+
+    setReview({ large, rest })
   }
 
   async function setPrimary(id: string) {
@@ -160,6 +190,65 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
               </p>
             </>
           )}
+        </div>
+      )}
+
+      {checking && (
+        <div className="flex items-center gap-2 text-xs text-stone-400 mb-4">
+          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          Checking file sizes…
+        </div>
+      )}
+
+      {review && (
+        <div className="border border-brand-500/30 bg-brand-500/[0.06] rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-2 mb-3">
+            <Minimize2 className="w-4 h-4 text-brand-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-stone-200 font-medium">
+                {review.large.length} file{review.large.length === 1 ? '' : 's'} over {formatBytes(COMPRESS_THRESHOLD_BYTES)} can be made smaller
+              </p>
+              <p className="text-[11px] text-stone-500 mt-0.5">
+                Resized to {MAX_EDGE_PX}px on the long edge and re-encoded as WebP. Originals up to {formatBytes(MAX_IMAGE_BYTES)} are still accepted.
+              </p>
+            </div>
+          </div>
+
+          <ul className="list-none p-0 m-0 mb-4 space-y-1.5">
+            {review.large.map((r, i) => (
+              <li key={i} className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="text-stone-400 truncate min-w-0">{r.file.name}</span>
+                <span className="text-stone-500 whitespace-nowrap tabular-nums">
+                  {r.changed ? (
+                    <>
+                      {formatBytes(r.originalBytes)} → <span className="text-brand-300">{formatBytes(r.bytes)}</span>
+                      <span className="text-stone-600"> ({savingsPercent(r)}% smaller)</span>
+                    </>
+                  ) : (
+                    <span className="text-stone-600">{formatBytes(r.originalBytes)} · already optimised</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="flex gap-2 flex-wrap">
+            <button
+              className="btn-primary text-xs py-1.5"
+              onClick={() => runUploads([...review.large.map(r => r.file), ...review.rest])}
+            >
+              Compress and upload
+            </button>
+            <button
+              className="btn-secondary text-xs py-1.5"
+              onClick={() => runUploads([...review.large.map(r => r.originalFile ?? r.file), ...review.rest])}
+            >
+              Upload originals
+            </button>
+            <button className="btn-secondary text-xs py-1.5" onClick={() => setReview(null)}>
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
