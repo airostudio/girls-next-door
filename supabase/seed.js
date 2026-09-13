@@ -19,16 +19,16 @@ const supabase = createClient(url, key)
 async function main() {
   await supabase.from('agency_settings').upsert({
     id: 'default',
-    agency_name: 'Clarity 4K',
+    agency_name: 'Girls next Door',
     currency: 'USD',
     default_fee: 20,
-    contact_email: 'info@clarity4k.com',
+    contact_email: 'info@girlsnextdoor.agency',
     contact_phone: '+1 (555) 000-0001',
   })
 
   const talents = [
     {
-      name: 'Alexa Monroe', stage_name: 'AlexaM', email: 'alexa@clarity4k.com',
+      name: 'Alexa Monroe', stage_name: 'AlexaM', email: 'alexa@girlsnextdoor.agency',
       phone: '+1 (555) 100-0001', nationality: 'American',
       bio: 'Fitness and lifestyle creator with a highly engaged audience. Specialises in wellness content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=alexa',
@@ -37,7 +37,7 @@ async function main() {
       social_links: JSON.stringify({ twitter: '@alexam', tiktok: '@alexam_official' }),
     },
     {
-      name: 'Brianna Cole', stage_name: 'BriCole', email: 'brianna@clarity4k.com',
+      name: 'Brianna Cole', stage_name: 'BriCole', email: 'brianna@girlsnextdoor.agency',
       phone: '+1 (555) 100-0002', nationality: 'Canadian',
       bio: 'Fashion-forward creator blending high-end style with authentic storytelling.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=brianna',
@@ -46,7 +46,7 @@ async function main() {
       social_links: JSON.stringify({ twitter: '@bricole', tiktok: '@bricole_style' }),
     },
     {
-      name: 'Camille Dupont', stage_name: 'CamD', email: 'camille@clarity4k.com',
+      name: 'Camille Dupont', stage_name: 'CamD', email: 'camille@girlsnextdoor.agency',
       phone: '+1 (555) 100-0003', nationality: 'French',
       bio: 'Art and photography enthusiast creating visually stunning editorial content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=camille',
@@ -55,7 +55,7 @@ async function main() {
       social_links: JSON.stringify({ twitter: '@camd_art' }),
     },
     {
-      name: 'Diana Lee', stage_name: 'DianaL', email: 'diana@clarity4k.com',
+      name: 'Diana Lee', stage_name: 'DianaL', email: 'diana@girlsnextdoor.agency',
       phone: '+1 (555) 100-0004', nationality: 'Australian',
       bio: 'Lifestyle and travel creator known for sun-soaked, aspirational content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=diana',
@@ -64,7 +64,7 @@ async function main() {
       social_links: JSON.stringify({ tiktok: '@dianalee_travel' }),
     },
     {
-      name: 'Elena Vasquez', stage_name: 'ElenaV', email: 'elena@clarity4k.com',
+      name: 'Elena Vasquez', stage_name: 'ElenaV', email: 'elena@girlsnextdoor.agency',
       phone: '+1 (555) 100-0005', nationality: 'Spanish',
       bio: 'Dance and performance creator with viral short-form video presence.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=elena',
@@ -73,7 +73,7 @@ async function main() {
       social_links: JSON.stringify({ instagram: 'elenav_official', twitter: '@elenav' }),
     },
     {
-      name: 'Fiona Walsh', stage_name: 'FiW', email: 'fiona@clarity4k.com',
+      name: 'Fiona Walsh', stage_name: 'FiW', email: 'fiona@girlsnextdoor.agency',
       phone: '+1 (555) 100-0006', nationality: 'Irish',
       bio: 'Comedy and lifestyle content creator building a loyal, engaged community.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=fiona',
@@ -82,7 +82,7 @@ async function main() {
       social_links: JSON.stringify({ tiktok: '@fionaw_comedy' }),
     },
     {
-      name: 'Sophia Reyes', stage_name: 'SophR', email: 'sophia@clarity4k.com',
+      name: 'Sophia Reyes', stage_name: 'SophR', email: 'sophia@girlsnextdoor.agency',
       phone: '+1 (555) 100-0007', nationality: 'American',
       bio: 'Sun-kissed, girl-next-door charm with a warm, approachable style that resonates with a broad fan base. Beach and poolside lifestyle content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=sophia',
@@ -91,7 +91,7 @@ async function main() {
       social_links: JSON.stringify({ twitter: '@sophr', tiktok: '@sophr_official' }),
     },
     {
-      name: 'Mia Torres', stage_name: 'MiaT', email: 'mia@clarity4k.com',
+      name: 'Mia Torres', stage_name: 'MiaT', email: 'mia@girlsnextdoor.agency',
       phone: '+1 (555) 100-0008', nationality: 'American',
       bio: 'Californian outdoors enthusiast with a natural, tanned, girl-next-door aesthetic. Known for laid-back, authentic day-in-the-life content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=mia',
@@ -100,7 +100,7 @@ async function main() {
       social_links: JSON.stringify({ tiktok: '@miat_official' }),
     },
     {
-      name: 'Isabella Cruz', stage_name: 'BellaC', email: 'isabella@clarity4k.com',
+      name: 'Isabella Cruz', stage_name: 'BellaC', email: 'isabella@girlsnextdoor.agency',
       phone: '+1 (555) 100-0009', nationality: 'Brazilian',
       bio: 'Warm, sun-bronzed glow paired with an easygoing, approachable presence. Fast-growing fitness and swimwear content creator.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=isabella',
@@ -109,7 +109,7 @@ async function main() {
       social_links: JSON.stringify({ twitter: '@bellac', tiktok: '@bellac_fit' }),
     },
     {
-      name: 'Kayla Bennett', stage_name: 'KaylaB', email: 'kayla@clarity4k.com',
+      name: 'Kayla Bennett', stage_name: 'KaylaB', email: 'kayla@girlsnextdoor.agency',
       phone: '+1 (555) 100-0010', nationality: 'American',
       bio: 'Down-to-earth, tanned girl-next-door with a following built on genuine, relatable outdoor and travel content.',
       avatar: 'https://api.dicebear.com/9.x/personas/svg?seed=kayla',
@@ -255,6 +255,38 @@ async function main() {
     if (!newlyCreatedIds.has(createdTalents[n.i].id)) continue // talent already existed, likely already has this note
     await supabase.from('notes').insert({ talent_id: createdTalents[n.i].id, content: n.content, author: n.author })
   }
+
+  // ── Portfolio media ────────────────────────────────────────────────────────
+  // Placeholder avatars, not photographs — see supabase/README-demo-media.md for
+  // how to swap these for real (or generated) images. Deterministic per talent,
+  // so re-running the seed produces the same set rather than duplicates.
+  const AVATAR_STYLES = ['personas', 'avataaars', 'lorelei', 'notionists', 'micah']
+
+  for (const [i, t] of createdTalents.entries()) {
+    if (!newlyCreatedIds.has(t.id)) continue // already seeded on an earlier run
+
+    const shots = 4 + (i % 4) // 4-7 items each, all within the 10 cap
+    const rows = Array.from({ length: shots }, (_, n) => {
+      const style = AVATAR_STYLES[(i + n) % AVATAR_STYLES.length]
+      const seed = encodeURIComponent(`${t.stage_name || t.name}-${n}`)
+      return {
+        talent_id:  t.id,
+        url:        `https://api.dicebear.com/9.x/${style}/svg?seed=${seed}`,
+        kind:       'PHOTO',
+        caption:    n === 0 ? 'Profile shot' : `Portfolio ${n}`,
+        sort_order: n,
+        is_primary: n === 0,
+      }
+    })
+
+    const { error } = await supabase.from('talent_media').insert(rows)
+    if (error) {
+      console.warn(`  ! portfolio for ${t.name}: ${error.message}`)
+      continue
+    }
+    await supabase.from('talent').update({ avatar: rows[0].url }).eq('id', t.id)
+  }
+  console.log(`🖼  Seeded portfolios for ${newlyCreatedIds.size} talent`)
 
   console.log('✅ Supabase seed complete')
 }

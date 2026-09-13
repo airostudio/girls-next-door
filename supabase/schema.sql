@@ -25,6 +25,45 @@ create table if not exists talent (
   updated_at     timestamptz not null default now()
 );
 
+-- ── Talent Media (portfolio) ─────────────────────────────────────────────────
+-- Up to 10 photos/videos per talent. `storage_path` is the object key inside the
+-- Supabase Storage bucket, kept so deleting a row can delete the file too; `url`
+-- is the public URL used for display.
+create table if not exists talent_media (
+  id           uuid primary key default uuid_generate_v4(),
+  talent_id    uuid not null references talent(id) on delete cascade,
+  url          text not null,
+  storage_path text,
+  kind         text not null default 'PHOTO', -- PHOTO | VIDEO
+  caption      text,
+  sort_order   int  not null default 0,
+  is_primary   boolean not null default false,
+  created_at   timestamptz not null default now()
+);
+
+create index if not exists talent_media_talent_idx on talent_media (talent_id, sort_order);
+
+-- At most one primary item per talent — the shot used as their avatar.
+create unique index if not exists talent_media_one_primary
+  on talent_media (talent_id) where is_primary;
+
+-- Cap each talent at 10 items. Enforced here as well as in the API: two uploads
+-- racing each other both pass an application-level count check, and a direct SQL
+-- insert skips it entirely.
+create or replace function talent_media_enforce_cap() returns trigger as $$
+begin
+  if (select count(*) from talent_media where talent_id = new.talent_id) >= 10 then
+    raise exception 'Talent % already has the maximum of 10 media items', new.talent_id
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists talent_media_cap on talent_media;
+create trigger talent_media_cap before insert on talent_media
+  for each row execute function talent_media_enforce_cap();
+
 -- ── Earnings ─────────────────────────────────────────────────────────────────
 create table if not exists earnings (
   id          uuid primary key default uuid_generate_v4(),
@@ -149,6 +188,7 @@ create table if not exists deals (
 -- ── Disable RLS (single-tenant per deployment — service role does all access
 --    control at the application layer via the staff table + RBAC checks) ─────
 alter table talent          disable row level security;
+alter table talent_media    disable row level security;
 alter table earnings        disable row level security;
 alter table expenses        disable row level security;
 alter table campaigns       disable row level security;

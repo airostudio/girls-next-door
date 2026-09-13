@@ -14,6 +14,8 @@ const nextConfig = {
     remotePatterns: [
       { protocol: 'https', hostname: 'api.dicebear.com' },
       { protocol: 'https', hostname: 'images.unsplash.com' },
+      // Supabase Storage — uploaded talent portfolio media.
+      { protocol: 'https', hostname: '*.supabase.co' },
     ],
   },
 }

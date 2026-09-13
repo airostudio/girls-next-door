@@ -15,13 +15,18 @@ import {
 import { formatCurrency, formatDate, TIER_COLORS, STATUS_COLORS, CAMPAIGN_STATUS_COLORS } from '@/lib/utils'
 import AddEarningModal from '@/components/talent/AddEarningModal'
 import AddExpenseModal from '@/components/talent/AddExpenseModal'
+import MediaGallery from '@/components/talent/MediaGallery'
+import { useSession } from 'next-auth/react'
+import { hasRole, type Role } from '@/lib/rbac'
 
 export default function TalentProfilePage() {
   const { id } = useParams<{ id: string }>()
   const router  = useRouter()
   const [talent,     setTalent]     = useState<any>(null)
   const [loading,    setLoading]    = useState(true)
-  const [tab,        setTab]        = useState<'overview' | 'earnings' | 'expenses' | 'campaigns' | 'notes'>('overview')
+  const [tab,        setTab]        = useState<'overview' | 'portfolio' | 'earnings' | 'expenses' | 'campaigns' | 'notes'>('overview')
+  const { data: session } = useSession()
+  const canEdit = hasRole((session?.user as any)?.role as Role | undefined, 'MANAGER')
   const [showEarn,   setShowEarn]   = useState(false)
   const [showExp,    setShowExp]    = useState(false)
 
@@ -69,7 +74,7 @@ export default function TalentProfilePage() {
     router.push('/talent')
   }
 
-  const TABS = ['overview', 'earnings', 'expenses', 'campaigns', 'notes'] as const
+  const TABS = ['overview', 'portfolio', 'earnings', 'expenses', 'campaigns', 'notes'] as const
 
   return (
     <>
@@ -174,6 +179,9 @@ export default function TalentProfilePage() {
             </button>
           ))}
         </div>
+
+        {/* Portfolio Tab */}
+        {tab === 'portfolio' && <MediaGallery talentId={id} canEdit={canEdit} />}
 
         {/* Overview Tab */}
         {tab === 'overview' && (
