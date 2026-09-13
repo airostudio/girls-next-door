@@ -8,12 +8,13 @@ The uploader writes to a Storage bucket named `talent-media`. Create it once:
 2. Name: `talent-media`
 3. **Public bucket: on** — portfolio images are served straight from their URL.
    (If you'd rather keep them private, the bucket can stay private and
-   `getPublicUrl` in `src/app/api/talent/[id]/media/route.ts` swapped for
+   `getPublicUrl` in `src/app/api/media/[ownerType]/[ownerId]/route.ts` swapped for
    `createSignedUrl`. That's a small change, but every render then costs a
    signing round-trip.)
 4. Run `supabase/schema.sql` if you haven't since this feature landed — it adds
-   the `talent_media` table, the one-profile-shot index, and the 10-item cap
-   trigger. The file is safe to re-run on an existing database.
+   the `suppliers` and `media` tables, the one-thumbnail-per-owner indexes, and
+   the 10-item cap trigger. If an older `talent_media` table exists its rows are
+   copied across and the table is dropped. The file is safe to re-run.
 
 No storage policies are needed: uploads go through a signed URL that the server
 issues only after checking the caller's role and the item count, and the service
@@ -23,13 +24,18 @@ role does all the writing.
 
 | | |
 |---|---|
-| Items per talent | **10** (photos and videos combined) |
+| Items per record | **10** (photos and videos combined) |
 | Image types | JPEG, PNG, WebP, AVIF — up to 15 MB |
 | Video types | MP4, WebM, MOV — up to 200 MB |
 
 The cap is enforced in three places: the UI disables the drop zone, the
 `/media/sign` route refuses to authorise an 11th upload, and a Postgres trigger
 rejects the insert even if both of those are bypassed.
+
+Media attaches to **talent**, **suppliers** and **client deals**. One `media`
+table serves all three, with a nullable foreign key per owner and a check that
+exactly one is set — so `on delete cascade` still cleans up when the owner goes,
+which a loose `(owner_type, owner_id)` pair could not do.
 
 ## Demo images
 

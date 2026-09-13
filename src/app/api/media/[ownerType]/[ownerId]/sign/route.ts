@@ -6,18 +6,24 @@ import { requireRole } from '@/lib/apiAuth'
 import {
   MEDIA_BUCKET, MAX_MEDIA_PER_TALENT, kindFor, maxBytesFor, formatBytes, storageKey,
 } from '@/lib/media'
+import { resolveOwner } from '../_shared'
+
+type Ctx = { params: { ownerType: string; ownerId: string } }
 
 /**
  * Authorises one upload and returns a signed URL the browser can PUT the file to.
  *
  * The file never passes through this route: serverless request bodies are capped
  * at a few MB, which any real video would blow straight through. Instead the
- * server does the deciding — role check, file-type check, size check, and the
+ * server does the deciding — role check, owner check, file type, size, and the
  * 10-item cap — and hands back a single-use URL scoped to one object key.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: Ctx) {
   const auth = await requireRole('MANAGER')
   if (!auth.ok) return auth.response
+
+  const owner = await resolveOwner(params.ownerType, params.ownerId)
+  if (!owner.ok) return owner.response
 
   let body: { filename?: string; contentType?: string; size?: number }
   try {
@@ -47,22 +53,19 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     )
   }
 
-  const { data: talent } = await supabase.from('talent').select('id').eq('id', params.id).single()
-  if (!talent) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
   const { count } = await supabase
-    .from('talent_media')
+    .from('media')
     .select('id', { count: 'exact', head: true })
-    .eq('talent_id', params.id)
+    .eq(owner.column, params.ownerId)
 
   if ((count ?? 0) >= MAX_MEDIA_PER_TALENT) {
     return NextResponse.json(
-      { error: `This talent already has ${MAX_MEDIA_PER_TALENT} items. Remove one before adding another.` },
+      { error: `This record already has ${MAX_MEDIA_PER_TALENT} items. Remove one before adding another.` },
       { status: 409 },
     )
   }
 
-  const path = storageKey(params.id, filename)
+  const path = storageKey(owner.type, params.ownerId, filename)
   const { data, error } = await supabase.storage.from(MEDIA_BUCKET).createSignedUploadUrl(path)
   if (error || !data) {
     return NextResponse.json({ error: error?.message ?? 'Could not start the upload' }, { status: 500 })

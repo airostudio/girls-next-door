@@ -279,7 +279,7 @@ async function main() {
       }
     })
 
-    const { error } = await supabase.from('talent_media').insert(rows)
+    const { error } = await supabase.from('media').insert(rows)
     if (error) {
       console.warn(`  ! portfolio for ${t.name}: ${error.message}`)
       continue

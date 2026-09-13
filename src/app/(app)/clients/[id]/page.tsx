@@ -9,6 +9,9 @@ import {
 } from 'lucide-react'
 import { formatCurrency, formatDate, CLIENT_STATUS_COLORS, DEAL_STATUS_COLORS } from '@/lib/utils'
 import AddDealModal from '@/components/clients/AddDealModal'
+import MediaGallery from '@/components/media/MediaGallery'
+import { useSession } from 'next-auth/react'
+import { hasRole, type Role } from '@/lib/rbac'
 
 export default function ClientDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -16,6 +19,9 @@ export default function ClientDetailPage() {
   const [client,   setClient]   = useState<any>(null)
   const [loading,  setLoading]  = useState(true)
   const [showDeal, setShowDeal] = useState(false)
+  const [openDeal, setOpenDeal] = useState<string | null>(null)
+  const { data: session } = useSession()
+  const canEdit = hasRole((session?.user as any)?.role as Role | undefined, 'MANAGER')
 
   const load = () => {
     setLoading(true)
@@ -123,18 +129,38 @@ export default function ClientDetailPage() {
 
           <div className="space-y-2">
             {deals.map((d: any) => (
-              <div key={d.id} className="flex items-center gap-3 p-3 bg-surface rounded-lg">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-white text-sm">{d.title}</div>
-                  <div className="text-xs text-stone-400 flex items-center gap-2 mt-0.5">
-                    {d.talent && <span>{d.talent.name}</span>}
-                    {d.startDate && <span>{formatDate(d.startDate)}{d.endDate ? ` → ${formatDate(d.endDate)}` : ''}</span>}
+              <div key={d.id} className="bg-surface rounded-lg">
+                <div className="flex items-center gap-3 p-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-white text-sm">{d.title}</div>
+                    <div className="text-xs text-stone-400 flex items-center gap-2 mt-0.5">
+                      {d.talent && <span>{d.talent.name}</span>}
+                      {d.startDate && <span>{formatDate(d.startDate)}{d.endDate ? ` → ${formatDate(d.endDate)}` : ''}</span>}
+                    </div>
                   </div>
+                  {d.value != null && (
+                    <div className="text-sm font-semibold text-emerald-400">{formatCurrency(d.value)}</div>
+                  )}
+                  <span className={`badge ${DEAL_STATUS_COLORS[d.status]}`}>{d.status}</span>
+                  <button
+                    onClick={() => setOpenDeal(openDeal === d.id ? null : d.id)}
+                    className="btn-secondary text-xs py-1"
+                  >
+                    {openDeal === d.id ? 'Hide assets' : 'Assets'}
+                  </button>
                 </div>
-                {d.value != null && (
-                  <div className="text-sm font-semibold text-emerald-400">{formatCurrency(d.value)}</div>
+
+                {openDeal === d.id && (
+                  <div className="border-t border-surface-border p-3">
+                    <MediaGallery
+                      ownerType="deal"
+                      ownerId={d.id}
+                      canEdit={canEdit}
+                      title="Deal assets"
+                      emptyLabel="No creative or deliverables attached to this deal yet."
+                    />
+                  </div>
                 )}
-                <span className={`badge ${DEAL_STATUS_COLORS[d.status]}`}>{d.status}</span>
               </div>
             ))}
             {deals.length === 0 && (

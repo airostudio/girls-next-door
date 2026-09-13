@@ -15,7 +15,7 @@ import {
 import { formatCurrency, formatDate, TIER_COLORS, STATUS_COLORS, CAMPAIGN_STATUS_COLORS } from '@/lib/utils'
 import AddEarningModal from '@/components/talent/AddEarningModal'
 import AddExpenseModal from '@/components/talent/AddExpenseModal'
-import MediaGallery from '@/components/talent/MediaGallery'
+import MediaGallery from '@/components/media/MediaGallery'
 import { useSession } from 'next-auth/react'
 import { hasRole, type Role } from '@/lib/rbac'
 
@@ -181,7 +181,7 @@ export default function TalentProfilePage() {
         </div>
 
         {/* Portfolio Tab */}
-        {tab === 'portfolio' && <MediaGallery talentId={id} canEdit={canEdit} />}
+        {tab === 'portfolio' && <MediaGallery ownerType="talent" ownerId={id} canEdit={canEdit} />}
 
         {/* Overview Tab */}
         {tab === 'overview' && (

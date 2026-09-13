@@ -5,7 +5,7 @@ import { Upload, Star, Trash2, Film, Loader2, AlertCircle, Minimize2 } from 'luc
 import { getBrowserSupabase } from '@/lib/supabaseBrowser'
 import {
   ACCEPT_ATTR, MAX_MEDIA_PER_TALENT, MAX_IMAGE_BYTES, MAX_VIDEO_BYTES,
-  formatBytes, kindFor,
+  MEDIA_BUCKET, formatBytes, kindFor, type OwnerType,
 } from '@/lib/media'
 import {
   compressImage, needsReview, savingsPercent,
@@ -21,9 +21,21 @@ interface MediaItem {
   isPrimary: boolean
 }
 
-interface Props { talentId: string; canEdit: boolean }
+interface Props {
+  ownerType: OwnerType
+  ownerId: string
+  canEdit: boolean
+  /** Heading above the grid — "Portfolio" for talent, "Samples" for a supplier. */
+  title?: string
+  emptyLabel?: string
+}
 
-export default function MediaGallery({ talentId, canEdit }: Props) {
+export default function MediaGallery({
+  ownerType, ownerId, canEdit,
+  title = 'Portfolio',
+  emptyLabel = 'No photos or videos yet.',
+}: Props) {
+  const base = `/api/media/${ownerType}/${ownerId}`
   const [items,    setItems]    = useState<MediaItem[]>([])
   const [loading,  setLoading]  = useState(true)
   const [busy,     setBusy]     = useState(0)      // uploads in flight
@@ -37,10 +49,10 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
   const full = remaining <= 0
 
   const load = useCallback(async () => {
-    const res = await fetch(`/api/talent/${talentId}/media`)
+    const res = await fetch(base)
     if (res.ok) setItems(await res.json())
     setLoading(false)
-  }, [talentId])
+  }, [base])
 
   useEffect(() => { load() }, [load])
 
@@ -53,7 +65,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
     const kind = kindFor(file.type)
     if (!kind) throw new Error(`${file.name} isn't a supported file type.`)
 
-    const sign = await fetch(`/api/talent/${talentId}/media/sign`, {
+    const sign = await fetch(`${base}/sign`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ filename: file.name, contentType: file.type, size: file.size }),
@@ -62,11 +74,11 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
     if (!sign.ok) throw new Error(signed.error ?? 'Upload was refused')
 
     const { error: upErr } = await getBrowserSupabase()
-      .storage.from('talent-media')
+      .storage.from(MEDIA_BUCKET)
       .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type })
     if (upErr) throw new Error(`${file.name} failed to upload: ${upErr.message}`)
 
-    const confirm = await fetch(`/api/talent/${talentId}/media`, {
+    const confirm = await fetch(base, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ path: signed.path, kind: signed.kind }),
@@ -123,7 +135,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
   }
 
   async function setPrimary(id: string) {
-    await fetch(`/api/talent/${talentId}/media/${id}`, {
+    await fetch(`${base}/${id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ isPrimary: true }),
@@ -132,14 +144,14 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
   }
 
   async function remove(id: string) {
-    await fetch(`/api/talent/${talentId}/media/${id}`, { method: 'DELETE' })
+    await fetch(`${base}/${id}`, { method: 'DELETE' })
     setItems(list => list.filter(i => i.id !== id))
   }
 
   return (
     <div className="card">
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <h3 className="section-title mb-0">Portfolio</h3>
+        <h3 className="section-title mb-0">{title}</h3>
         <span className="text-xs text-stone-500 tabular-nums">
           {items.length} / {MAX_MEDIA_PER_TALENT} items
         </span>
@@ -161,7 +173,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
           ].join(' ')}
         >
           <input
-            id={`media-upload-${talentId}`}
+            id={`media-upload-${ownerType}-${ownerId}`}
             ref={inputRef}
             type="file"
             multiple
@@ -176,7 +188,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
             </div>
           ) : full ? (
             <p className="text-sm text-stone-500">
-              Portfolio is full — remove an item to add another.
+              {title} is full — remove an item to add another.
             </p>
           ) : (
             <>
@@ -263,7 +275,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
         <p className="text-sm text-stone-500 py-6 text-center">Loading portfolio…</p>
       ) : items.length === 0 ? (
         <p className="text-sm text-stone-500 py-6 text-center">
-          No photos or videos yet.
+          {emptyLabel}
         </p>
       ) : (
         <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 list-none p-0 m-0">
@@ -287,7 +299,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
               )}
               {item.isPrimary && (
                 <span className="absolute top-1.5 right-1.5 bg-brand-500 text-black rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
-                  Profile
+                  Main
                 </span>
               )}
 
@@ -296,7 +308,7 @@ export default function MediaGallery({ talentId, canEdit }: Props) {
                   {item.kind === 'PHOTO' && !item.isPrimary && (
                     <button
                       onClick={() => setPrimary(item.id)}
-                      title="Use as profile shot"
+                      title="Use as thumbnail"
                       className="flex-1 bg-black/80 hover:bg-black text-stone-200 py-1.5 flex items-center justify-center"
                     >
                       <Star className="w-3.5 h-3.5" />
