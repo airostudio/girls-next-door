@@ -72,21 +72,18 @@ export async function GET(req: NextRequest) {
       checks.push({ name: 'Database — public schema', ok: false, detail: e?.message ?? 'unreachable' })
     }
 
-    // The schema the auth adapter uses. This is the usual cause of
-    // "Sign-in failed (Callback)".
+    // Tables the auth adapter uses. These live in `public` on purpose — a
+    // dedicated schema has to be added to Supabase's Exposed schemas by hand,
+    // and when it isn't, every sign-in fails with "PGRST106 Invalid schema".
     try {
-      const nextAuth = createClient(url, key, { db: { schema: 'next_auth' } })
-      const { error } = await nextAuth.from('users').select('id').limit(1)
+      const { error } = await createClient(url, key).from('auth_users').select('id').limit(1)
       checks.push({
-        name: 'Database — next_auth schema', ok: !error,
+        name: 'Database — auth tables', ok: !error,
         detail: error ? `${error.code ?? ''} ${error.message}`.trim() : 'reachable',
-        fix: !error ? undefined
-          : error.code === 'PGRST106'
-            ? 'Supabase → Settings → API → Exposed schemas: add next_auth. Creating the tables is not enough; PostgREST only serves listed schemas.'
-            : 'Run supabase/schema.sql, then add next_auth to Exposed schemas',
+        fix: error ? 'Run supabase/schema.sql in the Supabase SQL editor — it creates auth_users, auth_accounts and auth_verification_tokens.' : undefined,
       })
     } catch (e: any) {
-      checks.push({ name: 'Database — next_auth schema', ok: false, detail: e?.message ?? 'unreachable' })
+      checks.push({ name: 'Database — auth tables', ok: false, detail: e?.message ?? 'unreachable' })
     }
 
     // Storage bucket for portfolio uploads.
