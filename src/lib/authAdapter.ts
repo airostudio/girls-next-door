@@ -1,4 +1,16 @@
 import type { Adapter, AdapterAccount, AdapterUser, VerificationToken } from 'next-auth/adapters'
+
+/**
+ * Every method below annotates its parameters explicitly rather than relying on
+ * contextual typing from the Adapter interface. Some of its members — notably
+ * unlinkAccount — are typed as a UNION of function signatures, and TypeScript
+ * cannot contextually type a parameter against a union, so a destructured
+ * parameter silently becomes an implicit any and fails the build under strict.
+ * Whether that bites depends on which optional @auth/core types are installed,
+ * so it can pass locally and fail in CI. Explicit annotations make it moot.
+ */
+type AccountRef = Pick<AdapterAccount, 'provider' | 'providerAccountId'>
+type TokenRef = Pick<VerificationToken, 'identifier' | 'token'>
 import { supabase } from '@/lib/supabase'
 
 /**
@@ -71,21 +83,21 @@ export function PublicSchemaAdapter(): Adapter {
       return toUser(data as UserRow)
     },
 
-    async getUser(id) {
+    async getUser(id: string) {
       const { data, error } = await supabase
         .from(USERS).select(USER_COLUMNS).eq('id', id).maybeSingle()
       if (error) throw error
       return data ? toUser(data as UserRow) : null
     },
 
-    async getUserByEmail(email) {
+    async getUserByEmail(email: string) {
       const { data, error } = await supabase
         .from(USERS).select(USER_COLUMNS).eq('email', email).maybeSingle()
       if (error) throw error
       return data ? toUser(data as UserRow) : null
     },
 
-    async getUserByAccount({ provider, providerAccountId }) {
+    async getUserByAccount({ provider, providerAccountId }: AccountRef) {
       const { data, error } = await supabase
         .from(ACCOUNTS)
         .select(`user:${USERS}(${USER_COLUMNS})`)
@@ -98,7 +110,7 @@ export function PublicSchemaAdapter(): Adapter {
       return user ? toUser(user as UserRow) : null
     },
 
-    async updateUser(user) {
+    async updateUser(user: Partial<AdapterUser> & Pick<AdapterUser, 'id'>) {
       const row: Record<string, unknown> = {}
       if (user.name          !== undefined) row.name           = user.name
       if (user.email         !== undefined) row.email          = user.email
@@ -108,13 +120,13 @@ export function PublicSchemaAdapter(): Adapter {
       }
 
       const { data, error } = await supabase
-        .from(USERS).update(row).eq('id', user.id!).select(USER_COLUMNS).single()
+        .from(USERS).update(row).eq('id', user.id).select(USER_COLUMNS).single()
 
       if (error) throw error
       return toUser(data as UserRow)
     },
 
-    async deleteUser(userId) {
+    async deleteUser(userId: string) {
       // auth_accounts cascades via its foreign key.
       const { error } = await supabase.from(USERS).delete().eq('id', userId)
       if (error) throw error
@@ -137,7 +149,7 @@ export function PublicSchemaAdapter(): Adapter {
       if (error) throw error
     },
 
-    async unlinkAccount({ provider, providerAccountId }) {
+    async unlinkAccount({ provider, providerAccountId }: AccountRef) {
       const { error } = await supabase
         .from(ACCOUNTS).delete()
         .eq('provider', provider)
@@ -161,7 +173,7 @@ export function PublicSchemaAdapter(): Adapter {
      * rejects it, so a link that leaks from an inbox after it has been used is
      * worthless.
      */
-    async useVerificationToken({ identifier, token }) {
+    async useVerificationToken({ identifier, token }: TokenRef) {
       const { data, error } = await supabase
         .from(TOKENS).delete()
         .eq('identifier', identifier)
