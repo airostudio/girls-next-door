@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import {
   Building2, Shield, Save, CheckCircle, Info,
-  Plus, X, Trash2,
+  Plus, X, Trash2, Stethoscope, CheckCircle2, XCircle, RefreshCw,
 } from 'lucide-react'
 
-type Tab = 'agency' | 'team'
+type Tab = 'agency' | 'team' | 'health'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('agency')
@@ -21,6 +21,7 @@ export default function SettingsPage() {
           {([
             { key: 'agency', label: 'Agency', icon: Building2 },
             { key: 'team',   label: 'Team',   icon: Shield },
+            { key: 'health', label: 'Setup',  icon: Stethoscope },
           ] as { key: Tab; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
@@ -33,6 +34,7 @@ export default function SettingsPage() {
 
         {tab === 'agency' && <AgencySettings />}
         {tab === 'team'   && <TeamManagement />}
+        {tab === 'health' && <SetupHealth />}
       </div>
     </>
   )
@@ -295,6 +297,68 @@ function TeamManagement() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Configuration check. Sign-in failures show the user one opaque word while the
+ * real cause sits in a server log — this reports what is actually reachable.
+ */
+function SetupHealth() {
+  const [data,    setData]    = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    setLoading(true)
+    fetch('/api/diagnostics/auth')
+      .then(r => (r.ok ? r.json() : { ok: false, checks: [], error: 'Admin access required' }))
+      .then(setData)
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
+        <h3 className="section-title flex items-center gap-2 mb-0">
+          <Stethoscope className="w-4 h-4 text-brand-400" /> Setup check
+        </h3>
+        <button onClick={load} className="btn-secondary flex items-center gap-2 text-xs">
+          <RefreshCw className="w-3.5 h-3.5" /> Re-check
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(data?.checks ?? []).map((c: any) => (
+            <div key={c.name} className="flex items-start gap-3 p-3 bg-surface rounded-lg">
+              {c.ok
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                : <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-stone-100">{c.name}</div>
+                <div className={`text-xs mt-0.5 ${c.ok ? 'text-stone-500' : 'text-red-400'}`}>{c.detail}</div>
+                {c.fix && <div className="text-xs text-brand-300/90 mt-1.5 leading-relaxed">{c.fix}</div>}
+              </div>
+            </div>
+          ))}
+          {(data?.checks ?? []).length === 0 && (
+            <p className="text-sm text-stone-500 py-6 text-center">{data?.error ?? 'Nothing to report.'}</p>
+          )}
+        </div>
+      )}
+
+      <p className="text-[11px] text-stone-600 mt-4 leading-relaxed">
+        Reports whether each setting is present and whether the database and storage answer.
+        Never shows the value of a secret.
+      </p>
     </div>
   )
 }
