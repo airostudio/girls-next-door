@@ -3,7 +3,7 @@ import GoogleProvider from 'next-auth/providers/google'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import nodemailer from 'nodemailer'
-import { resolveAccess, normalizeEmail } from '@/lib/rbac'
+import { resolveAccess, normalizeEmail, linkAuthUser } from '@/lib/rbac'
 import { PublicSchemaAdapter } from '@/lib/authAdapter'
 import { createHash, timingSafeEqual } from 'crypto'
 import { getAgencyBranding } from '@/lib/agency'
@@ -145,24 +145,49 @@ export const authOptions: NextAuthOptions = {
     })] : []),
   ],
   callbacks: {
-    // Resolves the role here and stashes it on the same `user` object that
-    // the jwt callback receives next (same reference — mutating it is how
-    // data flows from signIn into jwt in NextAuth v4), so this stays a single
-    // access-control lookup per sign-in rather than repeating it per callback.
+    // Decides only whether this address may sign in at all.
+    //
+    // It deliberately does NOT stash the resolved identity on `user` for the
+    // jwt callback to read. That works for OAuth, where both callbacks see the
+    // same object, but breaks for magic links: the adapter returns a different
+    // user instance between the two, so the mutation is silently lost and the
+    // session ends up with no role or account type. The jwt callback resolves
+    // it again from the email instead — one extra lookup, only at sign-in, and
+    // correct for every provider.
     async signIn({ user }) {
-      const { allowed, role, accountType } = await resolveAccess(user.email)
-      if (allowed) {
-        ;(user as any).role = role
-        ;(user as any).accountType = accountType
-      }
+      const { allowed } = await resolveAccess(user.email)
       return allowed
     },
-    jwt({ token, user }) {
+
+    /**
+     * Runs on every request, but `user` is only present on the first call after
+     * a sign-in — so the lookup happens once per session, not per request.
+     */
+    async jwt({ token, user }) {
       if (user) {
+        const email = user.email ?? token.email
+        const { allowed, role, accountType, accountId } = await resolveAccess(email)
+        // signIn already authorised this, so a denial here means access was
+        // revoked between the two calls. Issue a token with no identity; every
+        // guard refuses it.
         token.id = user.id
-        token.email = user.email
-        token.role = (user as any).role
-        token.accountType = (user as any).accountType
+        token.email = email
+        token.role = allowed ? role : null
+        token.accountType = allowed ? accountType : null
+        token.accountId = allowed ? accountId : null
+
+        // Pin the login to its record so later sign-ins don't depend on the
+        // email still matching.
+        //
+        // Done here rather than in signIn because at that point a first-time
+        // magic-link user has not been persisted yet — next-auth synthesises a
+        // user whose id IS the email address, and storing that would write
+        // nonsense into auth_user_id. By the time jwt runs, the adapter has
+        // created the row and user.id is its real id. Best-effort: a failure
+        // must not block an authorised sign-in.
+        if (allowed && accountId && accountType && user.id) {
+          await linkAuthUser(accountType, accountId, user.id)
+        }
       }
       return token
     },
@@ -171,6 +196,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
         ;(session.user as any).accountType = token.accountType
+        ;(session.user as any).accountId = token.accountId
       }
       return session
     },

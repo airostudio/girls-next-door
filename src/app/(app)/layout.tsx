@@ -8,6 +8,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await getServerSession(authOptions)
   if (!session) redirect('/auth/login')
 
+  // Members have their own area. Sending them there rather than showing a bare
+  // 403 keeps the two sides of the product from bleeding into each other — and
+  // every API behind this layout independently asserts STAFF anyway, so this is
+  // navigation, not the security boundary.
+  if ((session.user as any)?.accountType !== 'STAFF') redirect('/portal')
+
   const branding = await getAgencyBranding()
 
   return (

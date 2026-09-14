@@ -40,3 +40,47 @@ export async function requireRole(min: Role): Promise<RequireRoleResult> {
   }
   return { ok: true, session }
 }
+
+type RequireAccountResult =
+  | { ok: true; accountType: 'TALENT' | 'SUPPLIER'; accountId: string; table: 'talent' | 'suppliers' }
+  | { ok: false; response: NextResponse }
+
+/**
+ * Guards the member portal. Returns the caller's own record id, taken from the
+ * session — never from the request.
+ *
+ * That is the whole point. A portal route that accepted an owner id from the
+ * URL or body would let any signed-in member read or edit any other member's
+ * data by changing a number. Every portal query scopes to the id this returns.
+ *
+ * Pass a type to restrict a route to one side of the marketplace; omit it for
+ * routes both use, such as profile and media.
+ */
+export async function requireAccount(only?: 'TALENT' | 'SUPPLIER'): Promise<RequireAccountResult> {
+  const session = await getServerSession(authOptions)
+  const user = session?.user as any
+  const accountType = user?.accountType as AccountType | undefined
+  const accountId = user?.accountId as string | undefined
+
+  if (!session?.user) {
+    return { ok: false, response: NextResponse.json({ error: 'Not authenticated' }, { status: 401 }) }
+  }
+  if (accountType !== 'TALENT' && accountType !== 'SUPPLIER') {
+    return { ok: false, response: NextResponse.json({ error: 'Not a member account' }, { status: 403 }) }
+  }
+  if (only && accountType !== only) {
+    return { ok: false, response: NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 }) }
+  }
+  // A member session without an account id can't be scoped to anything, so it
+  // must be refused rather than allowed to fall through to an unscoped query.
+  if (!accountId) {
+    return { ok: false, response: NextResponse.json({ error: 'Account is not linked to a record' }, { status: 403 }) }
+  }
+
+  return {
+    ok: true,
+    accountType,
+    accountId,
+    table: accountType === 'TALENT' ? 'talent' : 'suppliers',
+  }
+}

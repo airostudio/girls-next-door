@@ -170,6 +170,7 @@ create table if not exists suppliers (
   currency      text not null default 'USD',
   status        text not null default 'ACTIVE', -- ACTIVE | INACTIVE
   notes         text,
+  auth_user_id  uuid unique,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -346,6 +347,27 @@ create table if not exists auth_verification_tokens (
   expires    timestamptz not null,
   primary key (identifier, token)
 );
+
+-- Declared here rather than inline because auth_users is created further down.
+-- Safe to re-run.
+alter table talent    add column if not exists auth_user_id uuid;
+alter table suppliers add column if not exists auth_user_id uuid;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'talent_auth_user_fk') then
+    alter table talent add constraint talent_auth_user_fk
+      foreign key (auth_user_id) references auth_users(id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'suppliers_auth_user_fk') then
+    alter table suppliers add constraint suppliers_auth_user_fk
+      foreign key (auth_user_id) references auth_users(id) on delete set null;
+  end if;
+end $$;
+
+-- One login owns at most one record of each kind.
+create unique index if not exists talent_auth_user_uniq    on talent (auth_user_id)    where auth_user_id is not null;
+create unique index if not exists suppliers_auth_user_uniq on suppliers (auth_user_id) where auth_user_id is not null;
 
 alter table auth_users               disable row level security;
 alter table auth_accounts            disable row level security;
