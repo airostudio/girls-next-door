@@ -3,9 +3,18 @@ import { getAgencyBranding } from '@/lib/agency'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = {
-  title: 'Join — Girls next Door Talent Agency',
-  description: 'Apply to join the Girls next Door roster as talent, or register as a supplier.',
+/**
+ * Built from the agency name in the database rather than hard-coded, so the
+ * tab title cannot drift from the name shown on the page itself — which is
+ * exactly what happened while this page said "Girls next Door" and the heading
+ * beneath it said something else.
+ */
+export async function generateMetadata() {
+  const { agencyName } = await getAgencyBranding()
+  return {
+    title: `Join — ${agencyName}`,
+    description: `Apply to join the ${agencyName} roster as talent, or register as a supplier.`,
+  }
 }
 
 /**

@@ -141,7 +141,7 @@ function LoginFormInner({ agencyName, magicLinkEnabled, breakGlassEnabled }: Pro
                   required
                   autoComplete="username"
                   className="input"
-                  placeholder="you@girlsnextdoor.agency"
+                  placeholder="you@girlsnextdoor.online"
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                 />

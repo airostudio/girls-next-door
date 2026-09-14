@@ -101,7 +101,7 @@ export const authOptions: NextAuthOptions = {
       // Gate the actual send on the allow-list ourselves. NextAuth's default
       // flow would email anyone who types a request in, before it ever knows
       // whether that email will pass the signIn callback below — that's both
-      // an open mail-relay (arbitrary inboxes get "sign in to Clarity 4K"
+      // an open mail-relay (arbitrary inboxes get "sign in to the agency"
       // messages) and an oracle for probing who's on staff. Silently no-op-ing
       // for disallowed emails means the UI always shows the same "check your
       // inbox" response either way.

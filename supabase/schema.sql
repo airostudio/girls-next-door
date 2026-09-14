@@ -1,4 +1,4 @@
--- Clarity 4K — Supabase Schema
+-- Girls Next Door Talent Agency — Supabase Schema
 -- Run this in the Supabase SQL Editor to set up your database.
 
 create extension if not exists "uuid-ossp";
@@ -88,7 +88,7 @@ create table if not exists notes (
 -- ── Agency Settings ──────────────────────────────────────────────────────────
 create table if not exists agency_settings (
   id            text primary key default 'default',
-  agency_name   text not null default 'Clarity 4K',
+  agency_name   text not null default 'Girls Next Door Talent Agency',
   logo_url      text,
   currency      text not null default 'USD',
   default_fee   float not null default 20,
@@ -99,6 +99,14 @@ create table if not exists agency_settings (
 );
 
 insert into agency_settings (id) values ('default') on conflict (id) do nothing;
+
+-- Renames the row left behind by the Clarity 4K fork. Guarded on the old value
+-- so it runs once and then never again: a name set deliberately in
+-- Settings > Agency is not the placeholder, so this cannot overwrite it.
+update agency_settings
+   set agency_name = 'Girls Next Door Talent Agency'
+ where id = 'default'
+   and agency_name = 'Clarity 4K';
 
 -- ── Staff (team members + roles) ──────────────────────────────────────────────
 -- The access-control source of truth: who can sign in, and what they can do.

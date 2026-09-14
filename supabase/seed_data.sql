@@ -1,10 +1,10 @@
--- Clarity 4K — Demo Data
+-- Girls Next Door Talent Agency — Demo Data
 -- Run this in the Supabase SQL Editor AFTER running supabase/schema.sql.
 -- Safe to re-run: every insert is guarded so it won't duplicate rows.
 
 -- ── Agency settings ────────────────────────────────────────────────────────
 insert into agency_settings (id, agency_name, currency, default_fee, contact_email, contact_phone)
-values ('default', 'Clarity 4K', 'USD', 20, 'info@clarity4k.com', '+1 (555) 000-0001')
+values ('default', 'Girls Next Door Talent Agency', 'USD', 20, 'info@girlsnextdoor.online', '+1 (555) 000-0001')
 on conflict (id) do nothing;
 
 -- ── Talent ─────────────────────────────────────────────────────────────────

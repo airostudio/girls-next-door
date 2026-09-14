@@ -1,7 +1,7 @@
 {
-  "name": "clarity-4k",
+  "name": "girls-next-door",
   "version": "1.0.0",
-  "description": "Clarity 4K — Talent Management Platform",
+  "description": "Girls Next Door Talent Agency — Talent Management Platform",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,7 +11,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "http://local_proxy@127.0.0.1:40143/git/airostudio/Clarity-4k"
+    "url": "https://github.com/airostudio/girls-next-door"
   },
   "keywords": [],
   "author": "",

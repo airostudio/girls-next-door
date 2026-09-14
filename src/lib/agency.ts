@@ -8,7 +8,7 @@ export interface AgencyBranding {
 // Falls back to this if agency_settings is empty or Supabase isn't reachable
 // (e.g. local dev without env vars configured yet) — every page that renders
 // branding goes through here, so it must never throw.
-const DEFAULT_BRANDING: AgencyBranding = { agencyName: 'Clarity 4K', logoUrl: null }
+const DEFAULT_BRANDING: AgencyBranding = { agencyName: 'Girls Next Door Talent Agency', logoUrl: null }
 
 export async function getAgencyBranding(): Promise<AgencyBranding> {
   try {
