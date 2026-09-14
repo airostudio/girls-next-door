@@ -2,18 +2,19 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { signOut } from 'next-auth/react'
 import {
   LayoutDashboard, Users, Megaphone, DollarSign,
-  Settings, LogOut, ChevronRight, Handshake,
+  Settings, LogOut, ChevronRight, Handshake, Camera,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { signOutToHome } from '@/lib/siteUrl'
 import Logo from '@/components/layout/Logo'
 
 const nav = [
   { href: '/dashboard',   label: 'Dashboard',   icon: LayoutDashboard },
   { href: '/talent',      label: 'Talent Pool',  icon: Users },
   { href: '/clients',     label: 'Clients',      icon: Handshake },
+  { href: '/suppliers',   label: 'Suppliers',    icon: Camera },
   { href: '/marketing',   label: 'Marketing',    icon: Megaphone },
   { href: '/accounting',  label: 'Accounting',   icon: DollarSign },
   { href: '/settings',    label: 'Settings',     icon: Settings },
@@ -54,7 +55,7 @@ export default function Sidebar({ agencyName }: Props) {
       {/* Footer */}
       <div className="p-3 border-t border-surface-border">
         <button
-          onClick={() => signOut({ callbackUrl: '/auth/login' })}
+          onClick={() => signOutToHome()}
           className="nav-link w-full text-red-400 hover:text-red-300 hover:bg-red-400/10"
         >
           <LogOut className="w-4 h-4" />

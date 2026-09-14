@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import {
   Building2, Shield, Save, CheckCircle, Info,
-  Plus, X, Trash2,
+  Plus, X, Trash2, KeyRound,
 } from 'lucide-react'
 
 type Tab = 'agency' | 'team'
@@ -147,6 +147,29 @@ function TeamManagement() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm]       = useState({ email: '', name: '', role: 'VIEWER' })
+  const [pwFor,   setPwFor]   = useState<string | null>(null)
+  const [pwValue, setPwValue] = useState('')
+  const [pwError, setPwError] = useState('')
+  const [pwSaved, setPwSaved] = useState('')
+
+  async function savePassword(id: string) {
+    setPwError('')
+    const res = await fetch(`/api/staff/${id}/password`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: pwValue }),
+    })
+    const json = await res.json().catch(() => ({}))
+    if (!res.ok) { setPwError(json.error ?? 'Could not set the password'); return }
+    setPwFor(null); setPwValue(''); setPwSaved(id)
+    setTimeout(() => setPwSaved(''), 4000)
+    load()
+  }
+
+  async function clearPassword(id: string) {
+    await fetch(`/api/staff/${id}/password`, { method: 'DELETE' })
+    load()
+  }
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
 
@@ -212,7 +235,8 @@ function TeamManagement() {
         ) : (
           <div className="space-y-2">
             {staff.map(s => (
-              <div key={s.id} className="flex items-center gap-3 p-3 bg-surface rounded-lg">
+              <div key={s.id} className="bg-surface rounded-lg">
+              <div className="flex items-center gap-3 p-3">
                 <div className="w-9 h-9 rounded-full bg-brand-600/20 flex items-center justify-center text-sm font-bold text-brand-400 flex-shrink-0">
                   {(s.name || s.email).charAt(0).toUpperCase()}
                 </div>
@@ -234,9 +258,50 @@ function TeamManagement() {
                 >
                   {s.status}
                 </button>
+                <button
+                  onClick={() => { setPwFor(pwFor === s.id ? null : s.id); setPwValue(''); setPwError('') }}
+                  title={s.passwordUpdatedAt ? 'Change password' : 'Set a password'}
+                  className={`p-1 transition-colors ${s.passwordUpdatedAt ? 'text-brand-400 hover:text-brand-300' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  <KeyRound className="w-4 h-4" />
+                </button>
                 <button onClick={() => removeStaff(s.id)} className="text-stone-500 hover:text-red-400 transition-colors p-1">
                   <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
+
+              {pwSaved === s.id && (
+                <p className="text-xs text-emerald-400 px-3 pb-3">Password updated.</p>
+              )}
+
+              {pwFor === s.id && (
+                <div className="px-3 pb-3 pt-1 border-t border-surface-border/60">
+                  <label htmlFor={`pw-${s.id}`} className="block text-xs text-stone-400 mb-1.5 mt-3">
+                    {s.passwordUpdatedAt ? 'New password' : 'Set a password'} for {s.email}
+                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    <input
+                      id={`pw-${s.id}`}
+                      type="password"
+                      autoComplete="new-password"
+                      className="input flex-1 min-w-[200px] text-xs py-1.5"
+                      placeholder="At least 12 characters"
+                      value={pwValue}
+                      onChange={e => setPwValue(e.target.value)}
+                    />
+                    <button onClick={() => savePassword(s.id)} className="btn-primary text-xs py-1.5">Save</button>
+                    {s.passwordUpdatedAt && (
+                      <button onClick={() => clearPassword(s.id)} className="btn-secondary text-xs py-1.5">Remove</button>
+                    )}
+                  </div>
+                  {pwError && <p className="text-xs text-red-400 mt-2">{pwError}</p>}
+                  <p className="text-[11px] text-stone-600 mt-2">
+                    {s.passwordUpdatedAt
+                      ? 'They can also keep using Google or a magic link.'
+                      : 'Without one, they sign in with Google or a magic link only.'}
+                  </p>
+                </div>
+              )}
               </div>
             ))}
             {staff.length === 0 && (
@@ -252,7 +317,7 @@ function TeamManagement() {
           <strong className="text-stone-300">VIEWER</strong> can only view data. <strong className="text-stone-300">MANAGER</strong> can
           create and edit talent, campaigns, earnings, expenses, and clients. <strong className="text-stone-300">ADMIN</strong> can also
           delete records, manage the team, and edit agency settings. A team member signs in with the email
-          below via Google, GitHub, or a magic link — it doesn't need to match their login provider, just the
+          below via Google or a magic link — it doesn't need to match their login provider, just the
           email address itself.
         </p>
       </div>

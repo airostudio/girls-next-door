@@ -1,13 +1,13 @@
 import { NextAuthOptions } from 'next-auth'
 import type { Adapter } from 'next-auth/adapters'
 import GoogleProvider from 'next-auth/providers/google'
-import GitHubProvider from 'next-auth/providers/github'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { SupabaseAdapter } from '@auth/supabase-adapter'
 import nodemailer from 'nodemailer'
 import { createHash, timingSafeEqual } from 'crypto'
-import { resolveAccess, normalizeEmail } from '@/lib/rbac'
+import { resolveAccess, normalizeEmail, getStaffByEmail } from '@/lib/rbac'
+import { verifyPassword } from '@/lib/password'
 import { getAgencyBranding } from '@/lib/agency'
 
 // Fixed-length digest comparison so a mismatched-length input can't short-circuit
@@ -34,11 +34,41 @@ function getAdapter(): Adapter {
   return _adapter
 }
 
+/**
+ * A `get` trap alone is not enough here. next-auth wraps the adapter with
+ * `Object.keys(adapter).reduce(...)` (core/errors.js, adapterErrorHandler) to
+ * add error logging to each method — and `Object.keys` on a Proxy consults the
+ * `ownKeys` trap, not `get`. With an empty target and no `ownKeys`, that
+ * enumeration returns nothing, so next-auth builds an adapter with NO methods
+ * and every call fails as "<method> is not a function".
+ *
+ * That silently broke magic-link sign-in (getUserByEmail, createVerificationToken)
+ * and would break OAuth account persistence too. So the proxy has to be fully
+ * enumerable, not just readable. Descriptors are reported configurable because
+ * the target genuinely lacks these keys, and a Proxy may not claim a
+ * non-configurable property that the target doesn't have.
+ */
 const lazyAdapter = new Proxy({} as Adapter, {
   get(_, prop) {
     return (getAdapter() as any)[prop]
   },
+  has(_, prop) {
+    return prop in (getAdapter() as any)
+  },
+  ownKeys() {
+    return Reflect.ownKeys(getAdapter() as any)
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    const descriptor = Object.getOwnPropertyDescriptor(getAdapter() as any, prop)
+    if (!descriptor) return undefined
+    return { ...descriptor, enumerable: true, configurable: true }
+  },
 })
+
+/** True when EMAIL_SERVER and EMAIL_FROM are both set, so magic links can send. */
+export function emailSignInEnabled(): boolean {
+  return Boolean(process.env.EMAIL_SERVER && process.env.EMAIL_FROM)
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: lazyAdapter,
@@ -55,18 +85,19 @@ export const authOptions: NextAuthOptions = {
       clientId:     process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
       // Without this, signing in with a second provider under the same email
-      // as an existing account (e.g. Google first, then GitHub later) throws
+      // as an existing account (e.g. a magic link first, then Google later) throws
       // OAuthAccountNotLinked instead of just linking it. Since the staff
       // table is already the real access gate, trusting the email match here
       // is safe for this app.
       allowDangerousEmailAccountLinking: true,
     }),
-    GitHubProvider({
-      clientId:     process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-      allowDangerousEmailAccountLinking: true,
-    }),
-    EmailProvider({
+    // Registered only when a mail transport is configured. Without it,
+    // nodemailer.createTransport(undefined) throws inside
+    // sendVerificationRequest and /api/auth/signin/email returns a 500 with an
+    // empty body, which the client then fails to parse — the user just sees
+    // "Sending…" forever. Not offering the option at all is the honest
+    // behaviour.
+    ...(emailSignInEnabled() ? [EmailProvider({
       server: process.env.EMAIL_SERVER,
       from:   process.env.EMAIL_FROM,
       // Gate the actual send on the allow-list ourselves. NextAuth's default
@@ -99,33 +130,47 @@ export const authOptions: NextAuthOptions = {
           `,
         })
       },
-    }),
-    // Admin-only password login for testing, alongside the OAuth/magic-link
-    // flows above. Backed by a single fixed credential pair in env vars —
-    // not a per-user password table — since this exists purely so one person
-    // can get in without depending on OAuth or an email service being wired
-    // up correctly.
+    })] : []),
+    // Email + password sign-in for staff. Two sources of truth, in order:
+    //
+    //   1. staff.password_hash — set by an admin from Settings > Team. This is
+    //      the normal path for everyone on the team.
+    //   2. ADMIN_EMAIL / ADMIN_PASSWORD env vars — a permanent break-glass
+    //      account that works before anyone exists in `staff`, and still works
+    //      if the database is unreachable. Keep that password strong.
+    //
+    // Every failure returns the same null, and a wrong email still does the
+    // full key derivation, so neither the response nor its timing reveals
+    // whether an address is on the team.
     CredentialsProvider({
-      name: 'Admin password',
+      id: 'password',
+      name: 'Email and password',
       credentials: {
         email:    { label: 'Email',    type: 'email' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
+        const submitted = normalizeEmail(credentials?.email ?? '')
+        const password  = credentials?.password
+        if (!submitted || !password) return null
+
         const adminEmail    = process.env.ADMIN_EMAIL
         const adminPassword = process.env.ADMIN_PASSWORD
-        if (!adminEmail || !adminPassword) return null
-        if (!credentials?.email || !credentials?.password) return null
+        const normalizedAdmin = adminEmail ? normalizeEmail(adminEmail) : null
 
-        const submitted = normalizeEmail(credentials.email)
-        const expected   = normalizeEmail(adminEmail)
-        if (!submitted || !expected) return null
+        if (normalizedAdmin && submitted === normalizedAdmin && adminPassword) {
+          // Env-var credential, so there's no stored hash to verify against —
+          // a fixed-length digest comparison is the right tool here.
+          return safeEqual(password, adminPassword)
+            ? { id: adminEmail!, email: adminEmail!, name: 'Admin' }
+            : null
+        }
 
-        const emailMatches    = safeEqual(submitted, expected)
-        const passwordMatches = safeEqual(credentials.password, adminPassword)
-        if (!emailMatches || !passwordMatches) return null
+        const staff = await getStaffByEmail(submitted)
+        const ok = await verifyPassword(password, staff?.password_hash)
+        if (!ok || !staff || staff.status !== 'ACTIVE') return null
 
-        return { id: adminEmail, email: adminEmail, name: 'Admin' }
+        return { id: staff.id, email: staff.email, name: staff.name ?? staff.email }
       },
     }),
   ],
@@ -135,8 +180,11 @@ export const authOptions: NextAuthOptions = {
     // data flows from signIn into jwt in NextAuth v4), so this stays a single
     // access-control lookup per sign-in rather than repeating it per callback.
     async signIn({ user }) {
-      const { allowed, role } = await resolveAccess(user.email)
-      if (allowed) (user as any).role = role
+      const { allowed, role, accountType } = await resolveAccess(user.email)
+      if (allowed) {
+        ;(user as any).role = role
+        ;(user as any).accountType = accountType
+      }
       return allowed
     },
     jwt({ token, user }) {
@@ -144,6 +192,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.email = user.email
         token.role = (user as any).role
+        token.accountType = (user as any).accountType
       }
       return token
     },
@@ -151,6 +200,7 @@ export const authOptions: NextAuthOptions = {
       if (session.user) {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
+        ;(session.user as any).accountType = token.accountType
       }
       return session
     },

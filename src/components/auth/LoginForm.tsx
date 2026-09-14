@@ -17,25 +17,18 @@ function GoogleIcon() {
   )
 }
 
-function GitHubIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
-    </svg>
-  )
-}
 
-interface Props { agencyName: string }
+interface Props { agencyName: string; magicLinkEnabled: boolean }
 
-export default function LoginForm({ agencyName }: Props) {
+export default function LoginForm({ agencyName, magicLinkEnabled }: Props) {
   return (
     <Suspense fallback={null}>
-      <LoginFormInner agencyName={agencyName} />
+      <LoginFormInner agencyName={agencyName} magicLinkEnabled={magicLinkEnabled} />
     </Suspense>
   )
 }
 
-function LoginFormInner({ agencyName }: Props) {
+function LoginFormInner({ agencyName, magicLinkEnabled }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const errorCode = searchParams.get('error')
@@ -49,41 +42,45 @@ function LoginFormInner({ agencyName }: Props) {
     ? ERROR_MESSAGES[errorCode] ?? `Sign-in failed (${errorCode}). Please try again or contact your admin.`
     : null
 
-  const [email,   setEmail]   = useState('')
-  const [sending, setSending] = useState(false)
-  const [sent,    setSent]    = useState(false)
+  // One email field shared by both email routes: type it once, then either
+  // enter a password or ask for a link. Both are visible — no mode toggle, so
+  // neither route is hidden behind a click.
+  const [email,    setEmail]    = useState('')
+  const [password, setPassword] = useState('')
+  const [pending,  setPending]  = useState(false)
+  const [sent,     setSent]     = useState(false)
+  const [formError, setFormError] = useState('')
 
-  const [showAdminLogin, setShowAdminLogin] = useState(false)
-  const [adminEmail,    setAdminEmail]    = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
-  const [adminError,    setAdminError]    = useState('')
-  const [adminLoading,  setAdminLoading]  = useState(false)
-
-  async function sendMagicLink(e: React.FormEvent) {
-    e.preventDefault()
-    setSending(true)
-    await signIn('email', { email, redirect: false, callbackUrl: '/dashboard' })
-    setSending(false)
-    // Always show the same confirmation, whether or not this address is
-    // actually allow-listed — the response shouldn't reveal that.
-    setSent(true)
+  async function sendMagicLink() {
+    if (!email.trim()) { setFormError('Enter your email address first.'); return }
+    setFormError('')
+    setPending(true)
+    try {
+      await signIn('email', { email, redirect: false, callbackUrl: '/dashboard' })
+      // Always show the same confirmation, whether or not this address is
+      // actually allow-listed — the response shouldn't reveal that.
+      setSent(true)
+    } catch {
+      setFormError("Couldn't send a login link just now. Try a password, or contact your admin.")
+    } finally {
+      setPending(false)
+    }
   }
 
-  async function adminSignIn(e: React.FormEvent) {
+  async function passwordSignIn(e: React.FormEvent) {
     e.preventDefault()
-    setAdminLoading(true)
-    setAdminError('')
-    const res = await signIn('credentials', {
-      email: adminEmail,
-      password: adminPassword,
-      redirect: false,
-      callbackUrl: '/dashboard',
+    setPending(true)
+    setFormError('')
+    const res = await signIn('password', {
+      email, password, redirect: false, callbackUrl: '/dashboard',
     })
     if (res?.ok) {
       router.push('/dashboard')
     } else {
-      setAdminError('Invalid email or password.')
-      setAdminLoading(false)
+      // Deliberately does not distinguish an unknown address from a wrong
+      // password, or say whether the account has a password at all.
+      setFormError('Those details did not match an account.')
+      setPending(false)
     }
   }
 
@@ -100,7 +97,9 @@ function LoginFormInner({ agencyName }: Props) {
 
         <div className="card">
           <h2 className="font-display text-lg font-semibold text-stone-50 mb-1">Sign in to your account</h2>
-          <p className="text-xs text-stone-500 mb-6">Use your Google or GitHub account, or a login link by email.</p>
+          <p className="text-xs text-stone-500 mb-6">{magicLinkEnabled
+              ? 'Use your Google account, a password, or a link sent to your email.'
+              : 'Use your Google account, or your email and password.'}</p>
 
           {errorMessage && (
             <div className="flex items-start gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2.5 mb-4">
@@ -109,23 +108,13 @@ function LoginFormInner({ agencyName }: Props) {
             </div>
           )}
 
-          <div className="space-y-3">
-            <button
-              onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
-              className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-medium px-4 py-2.5 rounded-lg transition-colors text-sm border border-gray-200"
-            >
-              <GoogleIcon />
-              Continue with Google
-            </button>
-
-            <button
-              onClick={() => signIn('github', { callbackUrl: '/dashboard' })}
-              className="w-full flex items-center justify-center gap-3 bg-[#24292e] hover:bg-[#2f363d] text-white font-medium px-4 py-2.5 rounded-lg transition-colors text-sm"
-            >
-              <GitHubIcon />
-              Continue with GitHub
-            </button>
-          </div>
+          <button
+            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-medium px-4 py-2.5 rounded-lg transition-colors text-sm border border-gray-200"
+          >
+            <GoogleIcon />
+            Continue with Google
+          </button>
 
           <div className="flex items-center gap-3 my-5">
             <div className="h-px bg-surface-border flex-1" />
@@ -139,68 +128,75 @@ function LoginFormInner({ agencyName }: Props) {
               <span>If that email has access, a login link is on its way — check your inbox.</span>
             </div>
           ) : (
-            <form onSubmit={sendMagicLink} className="space-y-2.5">
-              <input
-                type="email"
-                required
-                className="input"
-                placeholder="you@company.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-              />
-              <button
-                type="submit"
-                disabled={sending}
-                className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
-              >
-                <Mail className="w-4 h-4" />
-                {sending ? 'Sending…' : 'Send me a login link'}
-              </button>
-            </form>
-          )}
+            <>
+              <form onSubmit={passwordSignIn} className="space-y-2.5">
+                <div>
+                  <label htmlFor="login-email" className="block text-xs text-stone-400 mb-1.5">Email</label>
+                  <input
+                    id="login-email"
+                    type="email"
+                    required
+                    autoComplete="username"
+                    className="input"
+                    placeholder="you@girlsnextdoor.agency"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                  />
+                </div>
 
-          <div className="mt-5 pt-4 border-t border-surface-border">
-            {showAdminLogin ? (
-              <form onSubmit={adminSignIn} className="space-y-2.5">
-                <input
-                  type="email"
-                  required
-                  className="input"
-                  placeholder="Admin email"
-                  value={adminEmail}
-                  onChange={e => setAdminEmail(e.target.value)}
-                />
-                <input
-                  type="password"
-                  required
-                  className="input"
-                  placeholder="Password"
-                  value={adminPassword}
-                  onChange={e => setAdminPassword(e.target.value)}
-                />
-                {adminError && (
+                <div>
+                  <label htmlFor="login-password" className="block text-xs text-stone-400 mb-1.5">Password</label>
+                  <input
+                    id="login-password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    className="input"
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                  />
+                </div>
+
+                {formError && (
                   <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-                    {adminError}
+                    {formError}
                   </div>
                 )}
+
                 <button
                   type="submit"
-                  disabled={adminLoading}
-                  className="btn-secondary w-full py-2 flex items-center justify-center gap-2 text-xs"
+                  disabled={pending}
+                  className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
                 >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  {adminLoading ? 'Signing in…' : 'Sign in with password'}
+                  <KeyRound className="w-4 h-4" />
+                  {pending ? 'Signing in…' : 'Sign in'}
                 </button>
               </form>
-            ) : (
-              <button
-                onClick={() => setShowAdminLogin(true)}
-                className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors mx-auto block"
-              >
-                Admin testing login
-              </button>
-            )}
-          </div>
+
+              {/* Passwordless route, sharing the email field above. A plain
+                  button rather than a second form, so the required password
+                  input can't block it. Hidden when no mail transport is
+                  configured — offering a button that can only fail is worse
+                  than not offering it. */}
+              {magicLinkEnabled && (
+              <div className="mt-5 pt-4 border-t border-surface-border">
+                <p className="text-[11px] text-stone-500 mb-2.5 text-center">
+                  No password? We&apos;ll email you a one-time sign-in link.
+                </p>
+                <button
+                  type="button"
+                  onClick={sendMagicLink}
+                  disabled={pending}
+                  className="btn-secondary w-full py-2 flex items-center justify-center gap-2 text-xs"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  {pending ? 'Sending…' : 'Email me a login link'}
+                </button>
+              </div>
+              )}
+            </>
+          )}
 
           <p className="text-[11px] text-stone-500 text-center mt-5 leading-relaxed">
             Access is restricted to authorised team members.<br />

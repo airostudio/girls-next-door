@@ -129,6 +129,27 @@ export const DealCreateSchema = z.object({
 export const DealUpdateSchema = DealCreateSchema.partial().extend({ clientId: z.string().uuid().optional() })
 
 // ── Agency settings ────────────────────────────────────────────────────────
+export const SupplierKindEnum = z.enum([
+  'PHOTOGRAPHER', 'VIDEOGRAPHER', 'MUA', 'STYLIST', 'STUDIO', 'OTHER',
+])
+
+export const SupplierCreateSchema = z.object({
+  name:         z.string().min(1, 'Name is required').max(200),
+  kind:         SupplierKindEnum.optional(),
+  contactName:  z.string().max(200).optional().nullable(),
+  contactEmail: z.string().email('Enter a valid email').max(320).optional().nullable().or(z.literal('')),
+  contactPhone: z.string().max(50).optional().nullable(),
+  website:      z.string().max(500).optional().nullable(),
+  city:         z.string().max(120).optional().nullable(),
+  country:      z.string().max(120).optional().nullable(),
+  dayRate:      z.number().nonnegative().optional().nullable(),
+  currency:     z.string().max(8).optional(),
+  status:       z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  notes:        z.string().max(5000).optional().nullable(),
+})
+
+export const SupplierUpdateSchema = SupplierCreateSchema.partial()
+
 export const AgencySettingsSchema = z.object({
   agencyName:   z.string().trim().min(1).max(200).optional(),
   currency:     z.string().trim().length(3).optional(),

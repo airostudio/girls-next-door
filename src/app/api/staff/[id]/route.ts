@@ -18,7 +18,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   if (body.role   !== undefined) row.role   = body.role
   if (body.status !== undefined) row.status = body.status
 
-  const { data, error } = await supabase.from('staff').update(row).eq('id', params.id).select().single()
+  const { data, error } = await supabase.from('staff').update(row).eq('id', params.id).select('id, email, name, role, status, password_updated_at, created_at, updated_at').single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
   return NextResponse.json(toCamel(data))
 }

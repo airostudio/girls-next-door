@@ -112,9 +112,17 @@ create table if not exists staff (
   name       text,
   role       text not null default 'VIEWER', -- ADMIN | MANAGER | VIEWER
   status     text not null default 'ACTIVE', -- ACTIVE | INACTIVE
+  -- scrypt$N$r$p$salt$hash, set by an admin from Settings > Team. Null means
+  -- this person signs in with Google or a magic link only.
+  password_hash       text,
+  password_updated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+-- Safe to re-run against a database that predates password sign-in.
+alter table staff add column if not exists password_hash       text;
+alter table staff add column if not exists password_updated_at timestamptz;
 
 -- ── Clients (brand / sponsor deals) ───────────────────────────────────────────
 create table if not exists clients (
@@ -146,9 +154,103 @@ create table if not exists deals (
   updated_at  timestamptz not null default now()
 );
 
+-- ── Suppliers (photographers, MUAs, stylists, studios) ──────────────────────
+-- Distinct from `clients`: clients are brands who pay the agency, suppliers are
+-- the people the agency books to produce work.
+create table if not exists suppliers (
+  id            uuid primary key default uuid_generate_v4(),
+  name          text not null,
+  kind          text not null default 'OTHER', -- PHOTOGRAPHER | VIDEOGRAPHER | MUA | STYLIST | STUDIO | OTHER
+  contact_name  text,
+  contact_email text,
+  contact_phone text,
+  website       text,
+  city          text,
+  country       text,
+  day_rate      float,
+  currency      text not null default 'USD',
+  status        text not null default 'ACTIVE', -- ACTIVE | INACTIVE
+  notes         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- ── Media (portfolios, supplier samples, deal assets) ───────────────────────
+-- One table serves all three owners, but deliberately NOT as a loose
+-- (owner_type, owner_id) pair: that can't carry a foreign key, so deleting a
+-- talent would silently strand their images. Instead there's a nullable FK per
+-- owner with a check that exactly one is set — real referential integrity, and
+-- `on delete cascade` cleans up the rows for free.
+--
+-- `storage_path` is the object key in the Supabase Storage bucket, kept so
+-- deleting a row can delete the file too; `url` is what gets displayed.
+create table if not exists media (
+  id           uuid primary key default uuid_generate_v4(),
+  talent_id    uuid references talent(id)    on delete cascade,
+  supplier_id  uuid references suppliers(id) on delete cascade,
+  deal_id      uuid references deals(id)     on delete cascade,
+  url          text not null,
+  storage_path text,
+  kind         text not null default 'PHOTO', -- PHOTO | VIDEO
+  caption      text,
+  sort_order   int  not null default 0,
+  is_primary   boolean not null default false,
+  created_at   timestamptz not null default now(),
+  constraint media_exactly_one_owner check (
+    (talent_id is not null)::int + (supplier_id is not null)::int + (deal_id is not null)::int = 1
+  )
+);
+
+create index if not exists media_talent_idx   on media (talent_id, sort_order)   where talent_id   is not null;
+create index if not exists media_supplier_idx on media (supplier_id, sort_order) where supplier_id is not null;
+create index if not exists media_deal_idx     on media (deal_id, sort_order)     where deal_id     is not null;
+
+-- At most one primary item per owner — the shot used as their thumbnail.
+create unique index if not exists media_one_primary_talent   on media (talent_id)   where is_primary and talent_id   is not null;
+create unique index if not exists media_one_primary_supplier on media (supplier_id) where is_primary and supplier_id is not null;
+create unique index if not exists media_one_primary_deal     on media (deal_id)     where is_primary and deal_id     is not null;
+
+-- Cap each owner at 10 items. Enforced here as well as in the API: two uploads
+-- racing each other both pass an application-level count check, and a direct
+-- SQL insert skips it entirely.
+create or replace function media_enforce_cap() returns trigger as $$
+declare existing int;
+begin
+  select count(*) into existing from media
+   where (new.talent_id   is not null and talent_id   = new.talent_id)
+      or (new.supplier_id is not null and supplier_id = new.supplier_id)
+      or (new.deal_id     is not null and deal_id     = new.deal_id);
+
+  if existing >= 10 then
+    raise exception 'This record already has the maximum of 10 media items'
+      using errcode = 'check_violation';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+drop trigger if exists media_cap on media;
+create trigger media_cap before insert on media
+  for each row execute function media_enforce_cap();
+
+-- Carry over anything already uploaded under the talent-only table, then retire
+-- it. Safe to re-run: the insert is skipped once talent_media is gone.
+do $$
+begin
+  if exists (select 1 from information_schema.tables
+              where table_schema = 'public' and table_name = 'talent_media') then
+    insert into media (talent_id, url, storage_path, kind, caption, sort_order, is_primary, created_at)
+    select talent_id, url, storage_path, kind, caption, sort_order, is_primary, created_at
+      from talent_media;
+    drop table talent_media;
+  end if;
+end $$;
+
 -- ── Disable RLS (single-tenant per deployment — service role does all access
 --    control at the application layer via the staff table + RBAC checks) ─────
 alter table talent          disable row level security;
+alter table suppliers       disable row level security;
+alter table media           disable row level security;
 alter table earnings        disable row level security;
 alter table expenses        disable row level security;
 alter table campaigns       disable row level security;
