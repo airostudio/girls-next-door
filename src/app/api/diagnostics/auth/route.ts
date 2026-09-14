@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { requireRole } from '@/lib/apiAuth'
 import { MEDIA_BUCKET } from '@/lib/media'
+import { mailTransport } from '@/lib/mailer'
 
 type Check = { name: string; ok: boolean; detail: string; fix?: string }
 
@@ -34,7 +35,17 @@ export async function GET(req: NextRequest) {
   need('Supabase service role key', 'SUPABASE_SERVICE_ROLE_KEY', 'Supabase → Settings → API → service_role')
   need('Google client ID', 'GOOGLE_CLIENT_ID', 'Google Cloud Console → Credentials')
   need('Google client secret', 'GOOGLE_CLIENT_SECRET', 'Google Cloud Console → Credentials')
-  need('Mail transport', 'EMAIL_SERVER', 'Unset means the magic-link option is hidden')
+  const transport = mailTransport()
+  checks.push({
+    name: 'Mail transport',
+    ok: transport !== null,
+    detail: transport === 'resend' ? 'Resend API (RESEND_API_KEY)'
+          : transport === 'smtp'   ? 'SMTP (EMAIL_SERVER)'
+          : 'not configured',
+    fix: transport ? undefined
+       : 'Set RESEND_API_KEY (or EMAIL_SERVER) plus EMAIL_FROM. Without one the magic-link option is hidden.',
+  })
+  need('Mail from-address', 'EMAIL_FROM', 'Must be on a domain verified in Resend, e.g. no-reply@girlsnextdoor.online')
   need('Break-glass admin', 'ADMIN_EMAIL', 'Needed to bootstrap access')
 
   // NEXTAUTH_URL has to match the origin the browser is actually on, or OAuth

@@ -2,8 +2,8 @@ import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import nodemailer from 'nodemailer'
-import { resolveAccess, normalizeEmail } from '@/lib/rbac'
+import { sendMail, mailEnabled } from '@/lib/mailer'
+import { resolveAccess, normalizeEmail, linkAuthUser } from '@/lib/rbac'
 import { PublicSchemaAdapter } from '@/lib/authAdapter'
 import { createHash, timingSafeEqual } from 'crypto'
 import { getAgencyBranding } from '@/lib/agency'
@@ -24,9 +24,9 @@ export function breakGlassEnabled(): boolean {
   return Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD)
 }
 
-/** True when EMAIL_SERVER and EMAIL_FROM are both set, so magic links can send. */
+/** True when a mail transport and a from-address are configured, so magic links can send. */
 export function emailSignInEnabled(): boolean {
-  return Boolean(process.env.EMAIL_SERVER && process.env.EMAIL_FROM)
+  return mailEnabled()
 }
 
 export const authOptions: NextAuthOptions = {
@@ -67,12 +67,11 @@ export const authOptions: NextAuthOptions = {
       // machine signs the previous person back in.
       authorization: { params: { prompt: 'select_account' } },
     }),
-    // Registered only when a mail transport is configured. Without it,
-    // nodemailer.createTransport(undefined) throws inside
-    // sendVerificationRequest and /api/auth/signin/email returns a 500 with an
-    // empty body, which the client then fails to parse — the user just sees
-    // "Sending…" forever. Not offering the option at all is the honest
-    // behaviour.
+    // Registered only when a mail transport is configured. Without one, the
+    // send throws inside sendVerificationRequest and /api/auth/signin/email
+    // returns a 500 with an empty body, which the client then fails to parse —
+    // the user just sees "Sending…" forever. Not offering the option at all is
+    // the honest behaviour.
     ...(emailSignInEnabled() ? [EmailProvider({
       server: process.env.EMAIL_SERVER,
       from:   process.env.EMAIL_FROM,
@@ -93,16 +92,14 @@ export const authOptions: NextAuthOptions = {
         if (!allowed) return
 
         const { agencyName } = await getAgencyBranding()
-        const transport = nodemailer.createTransport(process.env.EMAIL_SERVER)
-        await transport.sendMail({
+        await sendMail({
           to: identifier,
-          from: process.env.EMAIL_FROM,
           subject: `Sign in to ${agencyName}`,
-          text: `Sign in to ${agencyName}\n\n${url}\n\nThis link expires in 24 hours. If you didn't request it, ignore this email.`,
+          text: `Sign in to ${agencyName}\n\n${url}\n\nThis link expires in 15 minutes and can only be used once. If you didn't request it, ignore this email.`,
           html: `
             <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
               <h2 style="color: #1f2937;">Sign in to ${agencyName}</h2>
-              <p style="color: #4b5563;">Click the button below to sign in. This link expires in 24 hours.</p>
+              <p style="color: #4b5563;">Click the button below to sign in. This link expires in 15 minutes and can only be used once.</p>
               <a href="${url}" style="display: inline-block; background: #c8912a; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;">
                 Sign in to ${agencyName}
               </a>
@@ -145,24 +142,49 @@ export const authOptions: NextAuthOptions = {
     })] : []),
   ],
   callbacks: {
-    // Resolves the role here and stashes it on the same `user` object that
-    // the jwt callback receives next (same reference — mutating it is how
-    // data flows from signIn into jwt in NextAuth v4), so this stays a single
-    // access-control lookup per sign-in rather than repeating it per callback.
+    // Decides only whether this address may sign in at all.
+    //
+    // It deliberately does NOT stash the resolved identity on `user` for the
+    // jwt callback to read. That works for OAuth, where both callbacks see the
+    // same object, but breaks for magic links: the adapter returns a different
+    // user instance between the two, so the mutation is silently lost and the
+    // session ends up with no role or account type. The jwt callback resolves
+    // it again from the email instead — one extra lookup, only at sign-in, and
+    // correct for every provider.
     async signIn({ user }) {
-      const { allowed, role, accountType } = await resolveAccess(user.email)
-      if (allowed) {
-        ;(user as any).role = role
-        ;(user as any).accountType = accountType
-      }
+      const { allowed } = await resolveAccess(user.email)
       return allowed
     },
-    jwt({ token, user }) {
+
+    /**
+     * Runs on every request, but `user` is only present on the first call after
+     * a sign-in — so the lookup happens once per session, not per request.
+     */
+    async jwt({ token, user }) {
       if (user) {
+        const email = user.email ?? token.email
+        const { allowed, role, accountType, accountId } = await resolveAccess(email)
+        // signIn already authorised this, so a denial here means access was
+        // revoked between the two calls. Issue a token with no identity; every
+        // guard refuses it.
         token.id = user.id
-        token.email = user.email
-        token.role = (user as any).role
-        token.accountType = (user as any).accountType
+        token.email = email
+        token.role = allowed ? role : null
+        token.accountType = allowed ? accountType : null
+        token.accountId = allowed ? accountId : null
+
+        // Pin the login to its record so later sign-ins don't depend on the
+        // email still matching.
+        //
+        // Done here rather than in signIn because at that point a first-time
+        // magic-link user has not been persisted yet — next-auth synthesises a
+        // user whose id IS the email address, and storing that would write
+        // nonsense into auth_user_id. By the time jwt runs, the adapter has
+        // created the row and user.id is its real id. Best-effort: a failure
+        // must not block an authorised sign-in.
+        if (allowed && accountId && accountType && user.id) {
+          await linkAuthUser(accountType, accountId, user.id)
+        }
       }
       return token
     },
@@ -171,6 +193,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id
         ;(session.user as any).role = token.role
         ;(session.user as any).accountType = token.accountType
+        ;(session.user as any).accountId = token.accountId
       }
       return session
     },

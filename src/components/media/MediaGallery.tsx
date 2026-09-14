@@ -22,8 +22,15 @@ interface MediaItem {
 }
 
 interface Props {
-  ownerType: OwnerType
-  ownerId: string
+  /** Staff mode: addresses /api/media/<ownerType>/<ownerId>. */
+  ownerType?: OwnerType
+  ownerId?: string
+  /**
+   * Portal mode: a fixed base whose owner the server derives from the session.
+   * Takes precedence over ownerType/ownerId — a member's own media is never
+   * addressed by an id in the URL.
+   */
+  apiBase?: string
   canEdit: boolean
   /** Heading above the grid — "Portfolio" for talent, "Samples" for a supplier. */
   title?: string
@@ -31,11 +38,11 @@ interface Props {
 }
 
 export default function MediaGallery({
-  ownerType, ownerId, canEdit,
+  ownerType, ownerId, apiBase, canEdit,
   title = 'Portfolio',
   emptyLabel = 'No photos or videos yet.',
 }: Props) {
-  const base = `/api/media/${ownerType}/${ownerId}`
+  const base = apiBase ?? `/api/media/${ownerType}/${ownerId}`
   const [items,    setItems]    = useState<MediaItem[]>([])
   const [loading,  setLoading]  = useState(true)
   const [busy,     setBusy]     = useState(0)      // uploads in flight
@@ -173,7 +180,7 @@ export default function MediaGallery({
           ].join(' ')}
         >
           <input
-            id={`media-upload-${ownerType}-${ownerId}`}
+            id={`media-upload-${ownerType ?? 'portal'}-${ownerId ?? 'self'}`}
             ref={inputRef}
             type="file"
             multiple
