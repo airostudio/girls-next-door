@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, Users, Megaphone, DollarSign,
-  Settings, LogOut, ChevronRight, Handshake, Camera,
+  Settings, LogOut, ChevronRight, Handshake, Camera, Inbox,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { signOutToHome } from '@/lib/siteUrl'
@@ -15,6 +15,7 @@ const nav = [
   { href: '/talent',      label: 'Talent Pool',  icon: Users },
   { href: '/clients',     label: 'Clients',      icon: Handshake },
   { href: '/suppliers',   label: 'Suppliers',    icon: Camera },
+  { href: '/applications', label: 'Applications', icon: Inbox },
   { href: '/marketing',   label: 'Marketing',    icon: Megaphone },
   { href: '/accounting',  label: 'Accounting',   icon: DollarSign },
   { href: '/settings',    label: 'Settings',     icon: Settings },

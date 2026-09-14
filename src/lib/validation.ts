@@ -150,6 +150,31 @@ export const SupplierCreateSchema = z.object({
 
 export const SupplierUpdateSchema = SupplierCreateSchema.partial()
 
+export const ApplicationCreateSchema = z.object({
+  kind:         z.enum(['TALENT', 'SUPPLIER']),
+  fullName:     z.string().trim().min(2, 'Enter your full name').max(200),
+  email:        z.string().trim().email('Enter a valid email address').max(320),
+  phone:        z.string().trim().max(50).optional().or(z.literal('')),
+  city:         z.string().trim().max(120).optional().or(z.literal('')),
+  country:      z.string().trim().max(120).optional().or(z.literal('')),
+  businessName: z.string().trim().max(200).optional().or(z.literal('')),
+  taxId:        z.string().trim().max(60).optional().or(z.literal('')),
+  website:      z.string().trim().max(500).optional().or(z.literal('')),
+  instagram:    z.string().trim().max(120).optional().or(z.literal('')),
+  experience:   z.enum(['NONE', 'SOME', 'EXPERIENCED', 'PROFESSIONAL']).optional(),
+  about:        z.string().trim().max(3000).optional().or(z.literal('')),
+  // Honeypot: a real person never sees this field, so anything in it is a bot.
+  company:      z.string().max(0).optional().or(z.literal('')),
+  // Confirms the applicant is old enough to contract with the agency.
+  over18:       z.literal(true, { message: 'You must confirm you are 18 or over' }),
+  consent:      z.literal(true, { message: 'Please agree before submitting' }),
+})
+
+export const ApplicationReviewSchema = z.object({
+  status:     z.enum(['PENDING', 'REVIEWING', 'APPROVED', 'REJECTED']),
+  reviewNote: z.string().max(2000).optional().nullable(),
+})
+
 export const AgencySettingsSchema = z.object({
   agencyName:   z.string().trim().min(1).max(200).optional(),
   currency:     z.string().trim().length(3).optional(),

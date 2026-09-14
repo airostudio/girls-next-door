@@ -200,7 +200,7 @@ function LoginFormInner({ agencyName, magicLinkEnabled }: Props) {
 
           <p className="text-[11px] text-stone-500 text-center mt-5 leading-relaxed">
             Access is restricted to authorised team members.<br />
-            Contact your admin if you need access.
+            Not on the team? <a href="/join" className="text-brand-400 hover:text-brand-300">Apply to join</a>.
           </p>
         </div>
       </div>
