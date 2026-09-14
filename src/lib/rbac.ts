@@ -94,7 +94,16 @@ export async function resolveAccess(
     }
   }
 
-  const staff = await getStaffByEmail(normalized)
+  // A database that can't be reached must deny rather than throw: an
+  // unhandled error here surfaces as a 500 from the sign-in route instead of a
+  // refusal. ADMIN_EMAIL is checked above, so the break-glass account still
+  // works through an outage.
+  let staff: Awaited<ReturnType<typeof getStaffByEmail>> = null
+  try {
+    staff = await getStaffByEmail(normalized)
+  } catch {
+    return DENY
+  }
   if (!staff || staff.status !== 'ACTIVE') return DENY
   return { allowed: true, role: staff.role as Role, accountType: 'STAFF' }
 }

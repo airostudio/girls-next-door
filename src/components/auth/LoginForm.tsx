@@ -18,17 +18,17 @@ function GoogleIcon() {
 }
 
 
-interface Props { agencyName: string }
+interface Props { agencyName: string; magicLinkEnabled: boolean }
 
-export default function LoginForm({ agencyName }: Props) {
+export default function LoginForm({ agencyName, magicLinkEnabled }: Props) {
   return (
     <Suspense fallback={null}>
-      <LoginFormInner agencyName={agencyName} />
+      <LoginFormInner agencyName={agencyName} magicLinkEnabled={magicLinkEnabled} />
     </Suspense>
   )
 }
 
-function LoginFormInner({ agencyName }: Props) {
+function LoginFormInner({ agencyName, magicLinkEnabled }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const errorCode = searchParams.get('error')
@@ -42,24 +42,29 @@ function LoginFormInner({ agencyName }: Props) {
     ? ERROR_MESSAGES[errorCode] ?? `Sign-in failed (${errorCode}). Please try again or contact your admin.`
     : null
 
-  // One email field shared by both email routes — you type it once, then pick
-  // whether to enter a password or have a link sent.
+  // One email field shared by both email routes: type it once, then either
+  // enter a password or ask for a link. Both are visible — no mode toggle, so
+  // neither route is hidden behind a click.
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [mode,     setMode]     = useState<'password' | 'link'>('password')
   const [pending,  setPending]  = useState(false)
   const [sent,     setSent]     = useState(false)
   const [formError, setFormError] = useState('')
 
-  async function sendMagicLink(e: React.FormEvent) {
-    e.preventDefault()
+  async function sendMagicLink() {
+    if (!email.trim()) { setFormError('Enter your email address first.'); return }
     setFormError('')
     setPending(true)
-    await signIn('email', { email, redirect: false, callbackUrl: '/dashboard' })
-    setPending(false)
-    // Always show the same confirmation, whether or not this address is
-    // actually allow-listed — the response shouldn't reveal that.
-    setSent(true)
+    try {
+      await signIn('email', { email, redirect: false, callbackUrl: '/dashboard' })
+      // Always show the same confirmation, whether or not this address is
+      // actually allow-listed — the response shouldn't reveal that.
+      setSent(true)
+    } catch {
+      setFormError("Couldn't send a login link just now. Try a password, or contact your admin.")
+    } finally {
+      setPending(false)
+    }
   }
 
   async function passwordSignIn(e: React.FormEvent) {
@@ -92,7 +97,9 @@ function LoginFormInner({ agencyName }: Props) {
 
         <div className="card">
           <h2 className="font-display text-lg font-semibold text-stone-50 mb-1">Sign in to your account</h2>
-          <p className="text-xs text-stone-500 mb-6">Use your Google account, a password, or a link sent to your email.</p>
+          <p className="text-xs text-stone-500 mb-6">{magicLinkEnabled
+              ? 'Use your Google account, a password, or a link sent to your email.'
+              : 'Use your Google account, or your email and password.'}</p>
 
           {errorMessage && (
             <div className="flex items-start gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2.5 mb-4">
@@ -121,22 +128,22 @@ function LoginFormInner({ agencyName }: Props) {
               <span>If that email has access, a login link is on its way — check your inbox.</span>
             </div>
           ) : (
-            <form onSubmit={mode === 'password' ? passwordSignIn : sendMagicLink} className="space-y-2.5">
-              <div>
-                <label htmlFor="login-email" className="block text-xs text-stone-400 mb-1.5">Email</label>
-                <input
-                  id="login-email"
-                  type="email"
-                  required
-                  autoComplete="username"
-                  className="input"
-                  placeholder="you@girlsnextdoor.agency"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                />
-              </div>
+            <>
+              <form onSubmit={passwordSignIn} className="space-y-2.5">
+                <div>
+                  <label htmlFor="login-email" className="block text-xs text-stone-400 mb-1.5">Email</label>
+                  <input
+                    id="login-email"
+                    type="email"
+                    required
+                    autoComplete="username"
+                    className="input"
+                    placeholder="you@girlsnextdoor.agency"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                  />
+                </div>
 
-              {mode === 'password' && (
                 <div>
                   <label htmlFor="login-password" className="block text-xs text-stone-400 mb-1.5">Password</label>
                   <input
@@ -150,32 +157,45 @@ function LoginFormInner({ agencyName }: Props) {
                     onChange={e => setPassword(e.target.value)}
                   />
                 </div>
+
+                {formError && (
+                  <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
+                    {formError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
+                >
+                  <KeyRound className="w-4 h-4" />
+                  {pending ? 'Signing in…' : 'Sign in'}
+                </button>
+              </form>
+
+              {/* Passwordless route, sharing the email field above. A plain
+                  button rather than a second form, so the required password
+                  input can't block it. Hidden when no mail transport is
+                  configured — offering a button that can only fail is worse
+                  than not offering it. */}
+              {magicLinkEnabled && (
+              <div className="mt-5 pt-4 border-t border-surface-border">
+                <p className="text-[11px] text-stone-500 mb-2.5 text-center">
+                  No password? We&apos;ll email you a one-time sign-in link.
+                </p>
+                <button
+                  type="button"
+                  onClick={sendMagicLink}
+                  disabled={pending}
+                  className="btn-secondary w-full py-2 flex items-center justify-center gap-2 text-xs"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  {pending ? 'Sending…' : 'Email me a login link'}
+                </button>
+              </div>
               )}
-
-              {formError && (
-                <div className="text-xs text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-2">
-                  {formError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={pending}
-                className="btn-primary w-full py-2.5 flex items-center justify-center gap-2"
-              >
-                {mode === 'password'
-                  ? <><KeyRound className="w-4 h-4" />{pending ? 'Signing in…' : 'Sign in'}</>
-                  : <><Mail className="w-4 h-4" />{pending ? 'Sending…' : 'Email me a login link'}</>}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setMode(m => (m === 'password' ? 'link' : 'password')); setFormError('') }}
-                className="text-[11px] text-stone-500 hover:text-stone-300 transition-colors mx-auto block pt-1"
-              >
-                {mode === 'password' ? 'Email me a login link instead' : 'Use a password instead'}
-              </button>
-            </form>
+            </>
           )}
 
           <p className="text-[11px] text-stone-500 text-center mt-5 leading-relaxed">

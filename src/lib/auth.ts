@@ -34,11 +34,41 @@ function getAdapter(): Adapter {
   return _adapter
 }
 
+/**
+ * A `get` trap alone is not enough here. next-auth wraps the adapter with
+ * `Object.keys(adapter).reduce(...)` (core/errors.js, adapterErrorHandler) to
+ * add error logging to each method — and `Object.keys` on a Proxy consults the
+ * `ownKeys` trap, not `get`. With an empty target and no `ownKeys`, that
+ * enumeration returns nothing, so next-auth builds an adapter with NO methods
+ * and every call fails as "<method> is not a function".
+ *
+ * That silently broke magic-link sign-in (getUserByEmail, createVerificationToken)
+ * and would break OAuth account persistence too. So the proxy has to be fully
+ * enumerable, not just readable. Descriptors are reported configurable because
+ * the target genuinely lacks these keys, and a Proxy may not claim a
+ * non-configurable property that the target doesn't have.
+ */
 const lazyAdapter = new Proxy({} as Adapter, {
   get(_, prop) {
     return (getAdapter() as any)[prop]
   },
+  has(_, prop) {
+    return prop in (getAdapter() as any)
+  },
+  ownKeys() {
+    return Reflect.ownKeys(getAdapter() as any)
+  },
+  getOwnPropertyDescriptor(_, prop) {
+    const descriptor = Object.getOwnPropertyDescriptor(getAdapter() as any, prop)
+    if (!descriptor) return undefined
+    return { ...descriptor, enumerable: true, configurable: true }
+  },
 })
+
+/** True when EMAIL_SERVER and EMAIL_FROM are both set, so magic links can send. */
+export function emailSignInEnabled(): boolean {
+  return Boolean(process.env.EMAIL_SERVER && process.env.EMAIL_FROM)
+}
 
 export const authOptions: NextAuthOptions = {
   adapter: lazyAdapter,
@@ -61,7 +91,13 @@ export const authOptions: NextAuthOptions = {
       // is safe for this app.
       allowDangerousEmailAccountLinking: true,
     }),
-    EmailProvider({
+    // Registered only when a mail transport is configured. Without it,
+    // nodemailer.createTransport(undefined) throws inside
+    // sendVerificationRequest and /api/auth/signin/email returns a 500 with an
+    // empty body, which the client then fails to parse — the user just sees
+    // "Sending…" forever. Not offering the option at all is the honest
+    // behaviour.
+    ...(emailSignInEnabled() ? [EmailProvider({
       server: process.env.EMAIL_SERVER,
       from:   process.env.EMAIL_FROM,
       // Gate the actual send on the allow-list ourselves. NextAuth's default
@@ -94,7 +130,7 @@ export const authOptions: NextAuthOptions = {
           `,
         })
       },
-    }),
+    })] : []),
     // Email + password sign-in for staff. Two sources of truth, in order:
     //
     //   1. staff.password_hash — set by an admin from Settings > Team. This is
