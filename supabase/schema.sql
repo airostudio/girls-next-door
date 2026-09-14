@@ -1,4 +1,4 @@
--- Clarity 4K — Supabase Schema
+-- Girls Next Door Talent Agency — Supabase Schema
 -- Run this in the Supabase SQL Editor to set up your database.
 
 create extension if not exists "uuid-ossp";
@@ -88,7 +88,7 @@ create table if not exists notes (
 -- ── Agency Settings ──────────────────────────────────────────────────────────
 create table if not exists agency_settings (
   id            text primary key default 'default',
-  agency_name   text not null default 'Clarity 4K',
+  agency_name   text not null default 'Girls Next Door Talent Agency',
   logo_url      text,
   currency      text not null default 'USD',
   default_fee   float not null default 20,
@@ -99,6 +99,14 @@ create table if not exists agency_settings (
 );
 
 insert into agency_settings (id) values ('default') on conflict (id) do nothing;
+
+-- Renames the row left behind by the Clarity 4K fork. Guarded on the old value
+-- so it runs once and then never again: a name set deliberately in
+-- Settings > Agency is not the placeholder, so this cannot overwrite it.
+update agency_settings
+   set agency_name = 'Girls Next Door Talent Agency'
+ where id = 'default'
+   and agency_name = 'Clarity 4K';
 
 -- ── Staff (team members + roles) ──────────────────────────────────────────────
 -- The access-control source of truth: who can sign in, and what they can do.
@@ -368,6 +376,30 @@ end $$;
 -- One login owns at most one record of each kind.
 create unique index if not exists talent_auth_user_uniq    on talent (auth_user_id)    where auth_user_id is not null;
 create unique index if not exists suppliers_auth_user_uniq on suppliers (auth_user_id) where auth_user_id is not null;
+
+-- Which application this record was created from, when approving one created
+-- it. Kept so approval is reversible: declining an application later can find
+-- the account it produced and deactivate it, rather than leaving someone with
+-- access to a decision that was withdrawn. Null for records added by hand.
+alter table talent    add column if not exists application_id uuid;
+alter table suppliers add column if not exists application_id uuid;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'talent_application_fk') then
+    alter table talent add constraint talent_application_fk
+      foreign key (application_id) references applications(id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'suppliers_application_fk') then
+    alter table suppliers add constraint suppliers_application_fk
+      foreign key (application_id) references applications(id) on delete set null;
+  end if;
+end $$;
+
+-- An application produces at most one record, so approving twice cannot create
+-- a second account even if two reviewers click at the same moment.
+create unique index if not exists talent_application_uniq    on talent (application_id)    where application_id is not null;
+create unique index if not exists suppliers_application_uniq on suppliers (application_id) where application_id is not null;
 
 alter table auth_users               disable row level security;
 alter table auth_accounts            disable row level security;

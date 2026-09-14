@@ -15,7 +15,7 @@ const SIZES = {
 // onto one for browser chrome that may not be dark.
 export default function Logo({
   size = 'sm',
-  alt = 'Girls next Door Talent Agency',
+  alt = 'Girls Next Door Talent Agency',
 }: {
   size?: keyof typeof SIZES
   alt?: string

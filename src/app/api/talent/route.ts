@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
   const row: any = {
     name:           body.name,
     stage_name:     body.stageName,
-    email:          body.email,
+    // Lowercased to match how sign-in looks a member up: resolveAccess
+    // normalizes the address and compares it exactly, so a row stored as
+    // "Alice@Example.com" exists but can never be signed in to.
+    email:          body.email.toLowerCase(),
     phone:          body.phone,
     nationality:    body.nationality,
     bio:            body.bio,

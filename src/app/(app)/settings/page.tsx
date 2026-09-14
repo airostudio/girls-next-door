@@ -48,7 +48,7 @@ function AgencySettings() {
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(d => {
       setForm(d ?? {
-        agencyName: 'Clarity 4K', currency: 'USD', defaultFee: 20,
+        agencyName: 'Girls Next Door Talent Agency', currency: 'USD', defaultFee: 20,
         contactEmail: '', contactPhone: '', address: '', taxId: '',
       })
     })

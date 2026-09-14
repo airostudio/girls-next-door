@@ -20,8 +20,16 @@ const EMPTY = {
   company: '', // honeypot
 }
 
-export default function JoinForm({ agencyName }: { agencyName: string }) {
-  const [form,    setForm]    = useState({ ...EMPTY })
+export default function JoinForm({
+  agencyName, fromSignIn = false, prefillEmail = '', prefillName = '',
+}: {
+  agencyName: string
+  /** True when they arrived by signing in without an account. */
+  fromSignIn?: boolean
+  prefillEmail?: string
+  prefillName?: string
+}) {
+  const [form,    setForm]    = useState({ ...EMPTY, email: prefillEmail, fullName: prefillName })
   const [over18,  setOver18]  = useState(false)
   const [consent, setConsent] = useState(false)
   const [sending, setSending] = useState(false)
@@ -30,6 +38,19 @@ export default function JoinForm({ agencyName }: { agencyName: string }) {
 
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
   const isSupplier = form.kind === 'SUPPLIER'
+
+  const signInNotice = fromSignIn && (
+    <div className="card mb-4 border-brand-500/25 bg-brand-500/[0.06]">
+      <p className="text-sm text-stone-200 leading-relaxed">
+        You signed in successfully{prefillEmail ? <> as <span className="text-stone-50">{prefillEmail}</span></> : null},
+        but that address isn&apos;t on the {agencyName} roster yet.
+      </p>
+      <p className="text-xs text-stone-400 mt-2 leading-relaxed">
+        Apply below and we&apos;ll review it. Once you&apos;re approved, signing in with
+        the same account will take you straight to your portfolio.
+      </p>
+    </div>
+  )
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -82,6 +103,8 @@ export default function JoinForm({ agencyName }: { agencyName: string }) {
     >
       <div className="w-full max-w-lg mx-auto">
         <div className="mb-8"><Logo alt={agencyName} /></div>
+
+        {signInNotice}
 
         <div className="card">
           <h1 className="font-display text-xl font-semibold text-stone-50 mb-1">Join {agencyName}</h1>
