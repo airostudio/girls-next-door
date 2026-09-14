@@ -377,6 +377,30 @@ end $$;
 create unique index if not exists talent_auth_user_uniq    on talent (auth_user_id)    where auth_user_id is not null;
 create unique index if not exists suppliers_auth_user_uniq on suppliers (auth_user_id) where auth_user_id is not null;
 
+-- Which application this record was created from, when approving one created
+-- it. Kept so approval is reversible: declining an application later can find
+-- the account it produced and deactivate it, rather than leaving someone with
+-- access to a decision that was withdrawn. Null for records added by hand.
+alter table talent    add column if not exists application_id uuid;
+alter table suppliers add column if not exists application_id uuid;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'talent_application_fk') then
+    alter table talent add constraint talent_application_fk
+      foreign key (application_id) references applications(id) on delete set null;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'suppliers_application_fk') then
+    alter table suppliers add constraint suppliers_application_fk
+      foreign key (application_id) references applications(id) on delete set null;
+  end if;
+end $$;
+
+-- An application produces at most one record, so approving twice cannot create
+-- a second account even if two reviewers click at the same moment.
+create unique index if not exists talent_application_uniq    on talent (application_id)    where application_id is not null;
+create unique index if not exists suppliers_application_uniq on suppliers (application_id) where application_id is not null;
+
 alter table auth_users               disable row level security;
 alter table auth_accounts            disable row level security;
 alter table auth_verification_tokens disable row level security;

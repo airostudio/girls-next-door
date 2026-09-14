@@ -186,8 +186,9 @@ export default function ApplicationsPage() {
                       )}
 
                       <p className="text-[11px] text-stone-600 leading-relaxed pt-1 border-t border-surface-border/60">
-                        Approving records a decision. It does not create a login or a roster entry —
-                        add them under Talent or Suppliers when you&apos;re ready.
+                        Approving adds them to {a.kind === 'SUPPLIER' ? 'Suppliers' : 'Talent'} and lets them
+                        sign in to their own profile, where they fill in the rest and upload their portfolio.
+                        They get no access to the agency side. Declining afterwards deactivates that account.
                       </p>
 
                       {a.reviewedBy && (

@@ -4,13 +4,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabase, toCamel } from '@/lib/supabase'
 import { requireRole } from '@/lib/apiAuth'
 import { validateBody, ApplicationReviewSchema } from '@/lib/validation'
+import { provisionFromApplication, revokeForApplication } from '@/lib/applicationApproval'
 
 /**
  * Moves an application through review.
  *
- * Approving records a decision; it does NOT create a login. Converting an
- * approved applicant into a talent or supplier is a separate, explicit action,
- * and staff access remains the `staff` allow-list only.
+ * Approving creates the talent or supplier record the applicant's login
+ * resolves to, so their next sign-in lands on their own profile instead of
+ * being refused and sent back to the join form.
+ *
+ * It never creates a `staff` row. Every agency route is gated at VIEWER, the
+ * floor of the role ladder, so staff access would hand an applicant the
+ * agency's books and every model's earnings. Members have no role at all.
+ *
+ * Moving an approved application to any other status deactivates the record it
+ * created, so a decision can be withdrawn.
  */
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireRole('MANAGER')
@@ -34,7 +42,25 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  return NextResponse.json(toCamel(data))
+
+  // After the status is recorded, not before: if provisioning fails, the
+  // decision still stands and staff can see it, rather than the click appearing
+  // to have done nothing at all.
+  let account: { created: boolean; table?: string; id?: string; reason?: string } | undefined
+  if (b.status === 'APPROVED') {
+    const result = await provisionFromApplication(data as any)
+    account = result.created
+      ? { created: true, table: result.table, id: result.id }
+      : { created: false, reason: result.reason }
+    if (!result.created && result.reason === 'failed') {
+      console.error('[applications] approving %s did not create an account: %s', params.id, result.detail)
+    }
+  } else {
+    // Withdrawing an approval. A no-op unless this application produced a record.
+    await revokeForApplication(params.id)
+  }
+
+  return NextResponse.json({ ...toCamel(data), account })
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {

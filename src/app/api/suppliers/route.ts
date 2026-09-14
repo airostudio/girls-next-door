@@ -32,7 +32,9 @@ export async function POST(req: NextRequest) {
       name:          b.name,
       kind:          b.kind ?? 'OTHER',
       contact_name:  b.contactName  || null,
-      contact_email: b.contactEmail || null,
+      // Lowercased for the same reason as talent.email — sign-in matches the
+      // normalized address exactly.
+      contact_email: b.contactEmail?.toLowerCase() || null,
       contact_phone: b.contactPhone || null,
       website:       b.website      || null,
       city:          b.city         || null,
