@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import { requireRole } from '@/lib/apiAuth'
 import { MEDIA_BUCKET } from '@/lib/media'
 import { mailTransport } from '@/lib/mailer'
+import { inspectSupabaseKey, explainRejection } from '@/lib/supabaseKey'
 
 type Check = { name: string; ok: boolean; detail: string; fix?: string }
 
@@ -67,8 +68,15 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
+
+  // Read the credentials before using them. A key for the wrong project, the
+  // publishable key in place of the secret one, or an expired one all fail
+  // identically at request time — as a flat "Invalid API key" — so the shape is
+  // worth checking separately from whether the request works.
+  const keyReport = inspectSupabaseKey(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  checks.push({ name: 'Supabase key', ok: keyReport.ok, detail: keyReport.detail, fix: keyReport.fix })
 
   if (url && key) {
     // The app's own tables.
@@ -77,7 +85,9 @@ export async function GET(req: NextRequest) {
       checks.push({
         name: 'Database — public schema', ok: !error,
         detail: error ? `${error.code ?? ''} ${error.message}`.trim() : 'reachable',
-        fix: error ? 'Run supabase/schema.sql in the Supabase SQL editor' : undefined,
+        fix: error
+          ? explainRejection(error.message, key) ?? 'Run supabase/schema.sql in the Supabase SQL editor'
+          : undefined,
       })
     } catch (e: any) {
       checks.push({ name: 'Database — public schema', ok: false, detail: e?.message ?? 'unreachable' })
@@ -91,7 +101,10 @@ export async function GET(req: NextRequest) {
       checks.push({
         name: 'Database — auth tables', ok: !error,
         detail: error ? `${error.code ?? ''} ${error.message}`.trim() : 'reachable',
-        fix: error ? 'Run supabase/schema.sql in the Supabase SQL editor — it creates auth_users, auth_accounts and auth_verification_tokens.' : undefined,
+        fix: error
+          ? explainRejection(error.message, key)
+            ?? 'Run supabase/schema.sql in the Supabase SQL editor — it creates auth_users, auth_accounts and auth_verification_tokens.'
+          : undefined,
       })
     } catch (e: any) {
       checks.push({ name: 'Database — auth tables', ok: false, detail: e?.message ?? 'unreachable' })
@@ -103,7 +116,9 @@ export async function GET(req: NextRequest) {
       checks.push({
         name: `Storage bucket "${MEDIA_BUCKET}"`, ok: !error,
         detail: error ? error.message : 'reachable',
-        fix: error ? `Supabase → Storage → New bucket named ${MEDIA_BUCKET}, public` : undefined,
+        fix: error
+          ? explainRejection(error.message, key) ?? `Supabase → Storage → New bucket named ${MEDIA_BUCKET}, public`
+          : undefined,
       })
     } catch (e: any) {
       checks.push({ name: `Storage bucket "${MEDIA_BUCKET}"`, ok: false, detail: e?.message ?? 'unreachable' })

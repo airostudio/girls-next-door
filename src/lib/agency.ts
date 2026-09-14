@@ -12,11 +12,16 @@ const DEFAULT_BRANDING: AgencyBranding = { agencyName: 'Clarity 4K', logoUrl: nu
 
 export async function getAgencyBranding(): Promise<AgencyBranding> {
   try {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('agency_settings')
       .select('agency_name, logo_url')
       .eq('id', 'default')
       .single()
+    // Never throws, but it must not go quiet either. When the database is
+    // unreachable this fallback is the ONLY visible symptom — the site simply
+    // renders the placeholder name — and a credential failure can sit behind it
+    // for days while attention goes to whatever else happens to be broken.
+    if (error) console.error('[agency] branding lookup failed, using fallback:', error.message)
     if (!data) return DEFAULT_BRANDING
     return {
       agencyName: data.agency_name || DEFAULT_BRANDING.agencyName,
