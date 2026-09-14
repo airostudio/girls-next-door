@@ -2,7 +2,7 @@ import { NextAuthOptions } from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import nodemailer from 'nodemailer'
+import { sendMail, mailEnabled } from '@/lib/mailer'
 import { resolveAccess, normalizeEmail, linkAuthUser } from '@/lib/rbac'
 import { PublicSchemaAdapter } from '@/lib/authAdapter'
 import { createHash, timingSafeEqual } from 'crypto'
@@ -24,9 +24,9 @@ export function breakGlassEnabled(): boolean {
   return Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD)
 }
 
-/** True when EMAIL_SERVER and EMAIL_FROM are both set, so magic links can send. */
+/** True when a mail transport and a from-address are configured, so magic links can send. */
 export function emailSignInEnabled(): boolean {
-  return Boolean(process.env.EMAIL_SERVER && process.env.EMAIL_FROM)
+  return mailEnabled()
 }
 
 export const authOptions: NextAuthOptions = {
@@ -67,12 +67,11 @@ export const authOptions: NextAuthOptions = {
       // machine signs the previous person back in.
       authorization: { params: { prompt: 'select_account' } },
     }),
-    // Registered only when a mail transport is configured. Without it,
-    // nodemailer.createTransport(undefined) throws inside
-    // sendVerificationRequest and /api/auth/signin/email returns a 500 with an
-    // empty body, which the client then fails to parse — the user just sees
-    // "Sending…" forever. Not offering the option at all is the honest
-    // behaviour.
+    // Registered only when a mail transport is configured. Without one, the
+    // send throws inside sendVerificationRequest and /api/auth/signin/email
+    // returns a 500 with an empty body, which the client then fails to parse —
+    // the user just sees "Sending…" forever. Not offering the option at all is
+    // the honest behaviour.
     ...(emailSignInEnabled() ? [EmailProvider({
       server: process.env.EMAIL_SERVER,
       from:   process.env.EMAIL_FROM,
@@ -93,16 +92,14 @@ export const authOptions: NextAuthOptions = {
         if (!allowed) return
 
         const { agencyName } = await getAgencyBranding()
-        const transport = nodemailer.createTransport(process.env.EMAIL_SERVER)
-        await transport.sendMail({
+        await sendMail({
           to: identifier,
-          from: process.env.EMAIL_FROM,
           subject: `Sign in to ${agencyName}`,
-          text: `Sign in to ${agencyName}\n\n${url}\n\nThis link expires in 24 hours. If you didn't request it, ignore this email.`,
+          text: `Sign in to ${agencyName}\n\n${url}\n\nThis link expires in 15 minutes and can only be used once. If you didn't request it, ignore this email.`,
           html: `
             <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
               <h2 style="color: #1f2937;">Sign in to ${agencyName}</h2>
-              <p style="color: #4b5563;">Click the button below to sign in. This link expires in 24 hours.</p>
+              <p style="color: #4b5563;">Click the button below to sign in. This link expires in 15 minutes and can only be used once.</p>
               <a href="${url}" style="display: inline-block; background: #c8912a; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: 600; margin: 16px 0;">
                 Sign in to ${agencyName}
               </a>
