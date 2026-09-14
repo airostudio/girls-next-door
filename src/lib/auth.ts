@@ -29,6 +29,24 @@ export function emailSignInEnabled(): boolean {
   return mailEnabled()
 }
 
+/**
+ * Where to send someone who signed in successfully but isn't a member yet.
+ *
+ * The email and name come from the provider's verified profile, so prefilling
+ * the form with them saves retyping what they just proved they own. `notice`
+ * is what tells the page to explain why they are there rather than on the
+ * dashboard they expected.
+ *
+ * Relative on purpose: it is resolved against the host the browser is actually
+ * on, so it cannot be aimed elsewhere by a misconfigured NEXTAUTH_URL.
+ */
+function joinUrl(email?: string | null, name?: string | null): string {
+  const params = new URLSearchParams({ from: 'signin' })
+  if (email) params.set('email', email)
+  if (name) params.set('name', name)
+  return `/join?${params.toString()}`
+}
+
 export const authOptions: NextAuthOptions = {
   // Stores users, linked accounts and magic-link tokens in the `public`
   // schema. The previous @auth/supabase-adapter used a dedicated `next_auth`
@@ -153,7 +171,20 @@ export const authOptions: NextAuthOptions = {
     // correct for every provider.
     async signIn({ user }) {
       const { allowed } = await resolveAccess(user.email)
-      return allowed
+      if (allowed) return true
+
+      // Not a member. Returning false here sends them to next-auth's own
+      // "Access Denied — you do not have permission to sign in" page, which is
+      // a dead end: it tells someone who just proved they own an email address
+      // that they are unwelcome, with nothing to do next. Most people reaching
+      // it are not intruders, they are models and suppliers who have not
+      // applied yet, and the application form already exists.
+      //
+      // next-auth redirects to a string returned from this callback, and does
+      // so BEFORE the adapter creates anything — so this grants nothing and
+      // leaves no user row behind. It is still a refusal; it just points
+      // somewhere useful.
+      return joinUrl(user.email, user.name)
     },
 
     /**
