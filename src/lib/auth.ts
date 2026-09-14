@@ -1,60 +1,12 @@
 import { NextAuthOptions } from 'next-auth'
-import type { Adapter } from 'next-auth/adapters'
 import GoogleProvider from 'next-auth/providers/google'
 import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
-import { SupabaseAdapter } from '@auth/supabase-adapter'
 import nodemailer from 'nodemailer'
 import { resolveAccess, normalizeEmail } from '@/lib/rbac'
+import { PublicSchemaAdapter } from '@/lib/authAdapter'
 import { createHash, timingSafeEqual } from 'crypto'
 import { getAgencyBranding } from '@/lib/agency'
-
-// SupabaseAdapter() constructs its client eagerly, which throws at build time
-// (and at every cold import) if the Supabase env vars aren't set yet — same
-// class of bug as the plain Supabase client in src/lib/supabase.ts. Deferring
-// construction until NextAuth actually calls an adapter method keeps module
-// import side-effect-free.
-let _adapter: Adapter | null = null
-function getAdapter(): Adapter {
-  if (!_adapter) {
-    _adapter = SupabaseAdapter({
-      url: process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      secret: process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    })
-  }
-  return _adapter
-}
-
-/**
- * A `get` trap alone is not enough here. next-auth wraps the adapter with
- * `Object.keys(adapter).reduce(...)` (core/errors.js, adapterErrorHandler) to
- * add error logging to each method — and `Object.keys` on a Proxy consults the
- * `ownKeys` trap, not `get`. With an empty target and no `ownKeys`, that
- * enumeration returns nothing, so next-auth builds an adapter with NO methods
- * and every call fails as "<method> is not a function".
- *
- * That silently broke magic-link sign-in (getUserByEmail, createVerificationToken)
- * and would break OAuth account persistence too. So the proxy has to be fully
- * enumerable, not just readable. Descriptors are reported configurable because
- * the target genuinely lacks these keys, and a Proxy may not claim a
- * non-configurable property that the target doesn't have.
- */
-const lazyAdapter = new Proxy({} as Adapter, {
-  get(_, prop) {
-    return (getAdapter() as any)[prop]
-  },
-  has(_, prop) {
-    return prop in (getAdapter() as any)
-  },
-  ownKeys() {
-    return Reflect.ownKeys(getAdapter() as any)
-  },
-  getOwnPropertyDescriptor(_, prop) {
-    const descriptor = Object.getOwnPropertyDescriptor(getAdapter() as any, prop)
-    if (!descriptor) return undefined
-    return { ...descriptor, enumerable: true, configurable: true }
-  },
-})
 
 /**
  * Fixed-length digest comparison, so a mismatched-length input can't
@@ -78,10 +30,16 @@ export function emailSignInEnabled(): boolean {
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: lazyAdapter,
+  // Stores users, linked accounts and magic-link tokens in the `public`
+  // schema. The previous @auth/supabase-adapter used a dedicated `next_auth`
+  // schema, which Supabase does not expose over its REST API by default —
+  // every auth call failed with "PGRST106 Invalid schema: next_auth", which the
+  // user only ever saw as "Sign-in failed (Callback)". `public` is exposed
+  // everywhere and the rest of the app already uses it.
+  adapter: PublicSchemaAdapter(),
   // Credentials logins always issue a JWT regardless of this setting — with
   // strategy 'database' they'd appear to succeed but the session cookie
-  // wouldn't match anything in next_auth.sessions on the next request, so
+  // wouldn't match anything in auth_sessions on the next request, so
   // the admin would just get bounced back to login. OAuth/Email still work
   // fine under 'jwt': the adapter still persists their users/accounts and
   // verification tokens either way, only the session cookie format changes.
