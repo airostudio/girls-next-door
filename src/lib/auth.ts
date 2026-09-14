@@ -5,18 +5,9 @@ import EmailProvider from 'next-auth/providers/email'
 import CredentialsProvider from 'next-auth/providers/credentials'
 import { SupabaseAdapter } from '@auth/supabase-adapter'
 import nodemailer from 'nodemailer'
+import { resolveAccess, normalizeEmail } from '@/lib/rbac'
 import { createHash, timingSafeEqual } from 'crypto'
-import { resolveAccess, normalizeEmail, getStaffByEmail } from '@/lib/rbac'
-import { verifyPassword } from '@/lib/password'
 import { getAgencyBranding } from '@/lib/agency'
-
-// Fixed-length digest comparison so a mismatched-length input can't short-circuit
-// timingSafeEqual (which throws on unequal-length buffers) or leak length via timing.
-function safeEqual(a: string, b: string): boolean {
-  const digestA = createHash('sha256').update(a).digest()
-  const digestB = createHash('sha256').update(b).digest()
-  return timingSafeEqual(digestA, digestB)
-}
 
 // SupabaseAdapter() constructs its client eagerly, which throws at build time
 // (and at every cold import) if the Supabase env vars aren't set yet — same
@@ -65,6 +56,22 @@ const lazyAdapter = new Proxy({} as Adapter, {
   },
 })
 
+/**
+ * Fixed-length digest comparison, so a mismatched-length input can't
+ * short-circuit timingSafeEqual (which throws on unequal-length buffers) or
+ * leak length through timing.
+ */
+function safeEqual(a: string, b: string): boolean {
+  const digestA = createHash('sha256').update(a).digest()
+  const digestB = createHash('sha256').update(b).digest()
+  return timingSafeEqual(digestA, digestB)
+}
+
+/** True when the break-glass admin credential is configured. */
+export function breakGlassEnabled(): boolean {
+  return Boolean(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD)
+}
+
 /** True when EMAIL_SERVER and EMAIL_FROM are both set, so magic links can send. */
 export function emailSignInEnabled(): boolean {
   return Boolean(process.env.EMAIL_SERVER && process.env.EMAIL_FROM)
@@ -78,7 +85,14 @@ export const authOptions: NextAuthOptions = {
   // the admin would just get bounced back to login. OAuth/Email still work
   // fine under 'jwt': the adapter still persists their users/accounts and
   // verification tokens either way, only the session cookie format changes.
-  session: { strategy: 'jwt' },
+  session: {
+    strategy: 'jwt',
+    // 24 hours rather than next-auth's 30-day default. This app exposes the
+    // agency's finances, so a stolen or forgotten session shouldn't stay valid
+    // for a month; with Google SSO, signing back in is one click.
+    maxAge: 24 * 60 * 60,
+    updateAge: 60 * 60,
+  },
   pages: { signIn: '/auth/login' },
   providers: [
     GoogleProvider({
@@ -90,6 +104,10 @@ export const authOptions: NextAuthOptions = {
       // table is already the real access gate, trusting the email match here
       // is safe for this app.
       allowDangerousEmailAccountLinking: true,
+      // Always show the account chooser. Without it Google silently reuses
+      // whichever account the browser is already signed into, which on a shared
+      // machine signs the previous person back in.
+      authorization: { params: { prompt: 'select_account' } },
     }),
     // Registered only when a mail transport is configured. Without it,
     // nodemailer.createTransport(undefined) throws inside
@@ -100,6 +118,11 @@ export const authOptions: NextAuthOptions = {
     ...(emailSignInEnabled() ? [EmailProvider({
       server: process.env.EMAIL_SERVER,
       from:   process.env.EMAIL_FROM,
+      // 15 minutes, not next-auth's 24-hour default. A sign-in link sitting in
+      // an inbox is a bearer credential for this whole app; a day is far longer
+      // than anyone needs to click it, and long enough for a forwarded or
+      // synced mailbox to leak one.
+      maxAge: 15 * 60,
       // Gate the actual send on the allow-list ourselves. NextAuth's default
       // flow would email anyone who types a request in, before it ever knows
       // whether that email will pass the signIn callback below — that's both
@@ -131,20 +154,16 @@ export const authOptions: NextAuthOptions = {
         })
       },
     })] : []),
-    // Email + password sign-in for staff. Two sources of truth, in order:
+    // Break-glass admin. Deliberately the ONLY password in the system: it lives
+    // in env vars, so there is no password column, no stored hash, and nothing
+    // to leak from the database or reset through the UI. It exists so a fresh
+    // install, an unreachable database, a broken Google config or an unset mail
+    // server can never lock everyone out.
     //
-    //   1. staff.password_hash — set by an admin from Settings > Team. This is
-    //      the normal path for everyone on the team.
-    //   2. ADMIN_EMAIL / ADMIN_PASSWORD env vars — a permanent break-glass
-    //      account that works before anyone exists in `staff`, and still works
-    //      if the database is unreachable. Keep that password strong.
-    //
-    // Every failure returns the same null, and a wrong email still does the
-    // full key derivation, so neither the response nor its timing reveals
-    // whether an address is on the team.
-    CredentialsProvider({
-      id: 'password',
-      name: 'Email and password',
+    // Keep ADMIN_PASSWORD strong — anyone holding it has full access.
+    ...(breakGlassEnabled() ? [CredentialsProvider({
+      id: 'breakglass',
+      name: 'Admin access',
       credentials: {
         email:    { label: 'Email',    type: 'email' },
         password: { label: 'Password', type: 'password' },
@@ -152,27 +171,20 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         const submitted = normalizeEmail(credentials?.email ?? '')
         const password  = credentials?.password
-        if (!submitted || !password) return null
+        const adminEmail    = process.env.ADMIN_EMAIL!
+        const adminPassword = process.env.ADMIN_PASSWORD!
+        const expected = normalizeEmail(adminEmail)
 
-        const adminEmail    = process.env.ADMIN_EMAIL
-        const adminPassword = process.env.ADMIN_PASSWORD
-        const normalizedAdmin = adminEmail ? normalizeEmail(adminEmail) : null
+        if (!submitted || !password || !expected) return null
 
-        if (normalizedAdmin && submitted === normalizedAdmin && adminPassword) {
-          // Env-var credential, so there's no stored hash to verify against —
-          // a fixed-length digest comparison is the right tool here.
-          return safeEqual(password, adminPassword)
-            ? { id: adminEmail!, email: adminEmail!, name: 'Admin' }
-            : null
-        }
+        // Compare both halves every time, and never reveal which one failed.
+        const emailOk    = safeEqual(submitted, expected)
+        const passwordOk = safeEqual(password, adminPassword)
+        if (!emailOk || !passwordOk) return null
 
-        const staff = await getStaffByEmail(submitted)
-        const ok = await verifyPassword(password, staff?.password_hash)
-        if (!ok || !staff || staff.status !== 'ACTIVE') return null
-
-        return { id: staff.id, email: staff.email, name: staff.name ?? staff.email }
+        return { id: adminEmail, email: adminEmail, name: 'Admin' }
       },
-    }),
+    })] : []),
   ],
   callbacks: {
     // Resolves the role here and stashes it on the same `user` object that

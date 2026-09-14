@@ -112,17 +112,16 @@ create table if not exists staff (
   name       text,
   role       text not null default 'VIEWER', -- ADMIN | MANAGER | VIEWER
   status     text not null default 'ACTIVE', -- ACTIVE | INACTIVE
-  -- scrypt$N$r$p$salt$hash, set by an admin from Settings > Team. Null means
-  -- this person signs in with Google or a magic link only.
-  password_hash       text,
-  password_updated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
--- Safe to re-run against a database that predates password sign-in.
-alter table staff add column if not exists password_hash       text;
-alter table staff add column if not exists password_updated_at timestamptz;
+-- There are deliberately no password columns here. Staff sign in with Google or
+-- a one-time emailed link; the only password in the system is the break-glass
+-- ADMIN_PASSWORD env var, which is never stored in the database. These drops
+-- clean up an earlier revision that did store per-staff hashes.
+alter table staff drop column if exists password_hash;
+alter table staff drop column if exists password_updated_at;
 
 -- ── Clients (brand / sponsor deals) ───────────────────────────────────────────
 create table if not exists clients (
@@ -246,11 +245,51 @@ begin
   end if;
 end $$;
 
+-- ── Applications (public join form) ─────────────────────────────────────────
+-- Filled in by anyone who follows the public /join link. Deliberately its own
+-- table rather than a row in `talent`, `suppliers` or `staff`: an application
+-- is a claim by a stranger, not a record the agency has vetted. Nothing here
+-- grants the ability to sign in to the agency app — access is still only the
+-- `staff` allow-list, and an admin converts an approved application into a
+-- talent or supplier record explicitly.
+create table if not exists applications (
+  id            uuid primary key default uuid_generate_v4(),
+  kind          text not null default 'TALENT', -- TALENT | SUPPLIER
+  -- Personal
+  full_name     text not null,
+  email         text not null,
+  phone         text,
+  city          text,
+  country       text,
+  -- Business
+  business_name text,
+  tax_id        text,   -- ABN / VAT / EIN, whatever applies
+  website       text,
+  instagram     text,
+  experience    text,   -- NONE | SOME | EXPERIENCED | PROFESSIONAL
+  about         text,
+  -- Review
+  status        text not null default 'PENDING', -- PENDING | REVIEWING | APPROVED | REJECTED
+  review_note   text,
+  reviewed_by   text,
+  reviewed_at   timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index if not exists applications_status_idx on applications (status, created_at desc);
+
+-- One open application per address, so a refresh or a double submit doesn't
+-- create duplicates. A decided application doesn't block a later re-apply.
+create unique index if not exists applications_one_open_per_email
+  on applications (lower(email)) where status in ('PENDING', 'REVIEWING');
+
 -- ── Disable RLS (single-tenant per deployment — service role does all access
 --    control at the application layer via the staff table + RBAC checks) ─────
 alter table talent          disable row level security;
 alter table suppliers       disable row level security;
 alter table media           disable row level security;
+alter table applications    disable row level security;
 alter table earnings        disable row level security;
 alter table expenses        disable row level security;
 alter table campaigns       disable row level security;

@@ -1,8 +1,14 @@
 import LoginForm from '@/components/auth/LoginForm'
 import { getAgencyBranding } from '@/lib/agency'
-import { emailSignInEnabled } from '@/lib/auth'
+import { emailSignInEnabled, breakGlassEnabled } from '@/lib/auth'
 
 export default async function LoginPage() {
   const { agencyName } = await getAgencyBranding()
-  return <LoginForm agencyName={agencyName} magicLinkEnabled={emailSignInEnabled()} />
+  return (
+    <LoginForm
+      agencyName={agencyName}
+      magicLinkEnabled={emailSignInEnabled()}
+      breakGlassEnabled={breakGlassEnabled()}
+    />
+  )
 }

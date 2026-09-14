@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import Topbar from '@/components/layout/Topbar'
 import {
   Building2, Shield, Save, CheckCircle, Info,
-  Plus, X, Trash2, KeyRound,
+  Plus, X, Trash2, Stethoscope, CheckCircle2, XCircle, RefreshCw,
 } from 'lucide-react'
 
-type Tab = 'agency' | 'team'
+type Tab = 'agency' | 'team' | 'health'
 
 export default function SettingsPage() {
   const [tab, setTab] = useState<Tab>('agency')
@@ -21,6 +21,7 @@ export default function SettingsPage() {
           {([
             { key: 'agency', label: 'Agency', icon: Building2 },
             { key: 'team',   label: 'Team',   icon: Shield },
+            { key: 'health', label: 'Setup',  icon: Stethoscope },
           ] as { key: Tab; label: string; icon: any }[]).map(({ key, label, icon: Icon }) => (
             <button key={key} onClick={() => setTab(key)}
               className={`flex items-center gap-2 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
@@ -33,6 +34,7 @@ export default function SettingsPage() {
 
         {tab === 'agency' && <AgencySettings />}
         {tab === 'team'   && <TeamManagement />}
+        {tab === 'health' && <SetupHealth />}
       </div>
     </>
   )
@@ -147,29 +149,6 @@ function TeamManagement() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm]       = useState({ email: '', name: '', role: 'VIEWER' })
-  const [pwFor,   setPwFor]   = useState<string | null>(null)
-  const [pwValue, setPwValue] = useState('')
-  const [pwError, setPwError] = useState('')
-  const [pwSaved, setPwSaved] = useState('')
-
-  async function savePassword(id: string) {
-    setPwError('')
-    const res = await fetch(`/api/staff/${id}/password`, {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ password: pwValue }),
-    })
-    const json = await res.json().catch(() => ({}))
-    if (!res.ok) { setPwError(json.error ?? 'Could not set the password'); return }
-    setPwFor(null); setPwValue(''); setPwSaved(id)
-    setTimeout(() => setPwSaved(''), 4000)
-    load()
-  }
-
-  async function clearPassword(id: string) {
-    await fetch(`/api/staff/${id}/password`, { method: 'DELETE' })
-    load()
-  }
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
 
@@ -258,50 +237,11 @@ function TeamManagement() {
                 >
                   {s.status}
                 </button>
-                <button
-                  onClick={() => { setPwFor(pwFor === s.id ? null : s.id); setPwValue(''); setPwError('') }}
-                  title={s.passwordUpdatedAt ? 'Change password' : 'Set a password'}
-                  className={`p-1 transition-colors ${s.passwordUpdatedAt ? 'text-brand-400 hover:text-brand-300' : 'text-stone-500 hover:text-stone-300'}`}
-                >
-                  <KeyRound className="w-4 h-4" />
-                </button>
                 <button onClick={() => removeStaff(s.id)} className="text-stone-500 hover:text-red-400 transition-colors p-1">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
 
-              {pwSaved === s.id && (
-                <p className="text-xs text-emerald-400 px-3 pb-3">Password updated.</p>
-              )}
-
-              {pwFor === s.id && (
-                <div className="px-3 pb-3 pt-1 border-t border-surface-border/60">
-                  <label htmlFor={`pw-${s.id}`} className="block text-xs text-stone-400 mb-1.5 mt-3">
-                    {s.passwordUpdatedAt ? 'New password' : 'Set a password'} for {s.email}
-                  </label>
-                  <div className="flex gap-2 flex-wrap">
-                    <input
-                      id={`pw-${s.id}`}
-                      type="password"
-                      autoComplete="new-password"
-                      className="input flex-1 min-w-[200px] text-xs py-1.5"
-                      placeholder="At least 12 characters"
-                      value={pwValue}
-                      onChange={e => setPwValue(e.target.value)}
-                    />
-                    <button onClick={() => savePassword(s.id)} className="btn-primary text-xs py-1.5">Save</button>
-                    {s.passwordUpdatedAt && (
-                      <button onClick={() => clearPassword(s.id)} className="btn-secondary text-xs py-1.5">Remove</button>
-                    )}
-                  </div>
-                  {pwError && <p className="text-xs text-red-400 mt-2">{pwError}</p>}
-                  <p className="text-[11px] text-stone-600 mt-2">
-                    {s.passwordUpdatedAt
-                      ? 'They can also keep using Google or a magic link.'
-                      : 'Without one, they sign in with Google or a magic link only.'}
-                  </p>
-                </div>
-              )}
               </div>
             ))}
             {staff.length === 0 && (
@@ -357,6 +297,68 @@ function TeamManagement() {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+
+/**
+ * Configuration check. Sign-in failures show the user one opaque word while the
+ * real cause sits in a server log — this reports what is actually reachable.
+ */
+function SetupHealth() {
+  const [data,    setData]    = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const load = () => {
+    setLoading(true)
+    fetch('/api/diagnostics/auth')
+      .then(r => (r.ok ? r.json() : { ok: false, checks: [], error: 'Admin access required' }))
+      .then(setData)
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(load, [])
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-5 gap-4 flex-wrap">
+        <h3 className="section-title flex items-center gap-2 mb-0">
+          <Stethoscope className="w-4 h-4 text-brand-400" /> Setup check
+        </h3>
+        <button onClick={load} className="btn-secondary flex items-center gap-2 text-xs">
+          <RefreshCw className="w-3.5 h-3.5" /> Re-check
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-5 h-5 border-2 border-brand-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {(data?.checks ?? []).map((c: any) => (
+            <div key={c.name} className="flex items-start gap-3 p-3 bg-surface rounded-lg">
+              {c.ok
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                : <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />}
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-stone-100">{c.name}</div>
+                <div className={`text-xs mt-0.5 ${c.ok ? 'text-stone-500' : 'text-red-400'}`}>{c.detail}</div>
+                {c.fix && <div className="text-xs text-brand-300/90 mt-1.5 leading-relaxed">{c.fix}</div>}
+              </div>
+            </div>
+          ))}
+          {(data?.checks ?? []).length === 0 && (
+            <p className="text-sm text-stone-500 py-6 text-center">{data?.error ?? 'Nothing to report.'}</p>
+          )}
+        </div>
+      )}
+
+      <p className="text-[11px] text-stone-600 mt-4 leading-relaxed">
+        Reports whether each setting is present and whether the database and storage answer.
+        Never shows the value of a secret.
+      </p>
     </div>
   )
 }
